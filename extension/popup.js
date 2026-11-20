@@ -1,5 +1,5 @@
 import { workerOrigin } from './config.js';
-import { encodeRepository, normalizeRepositoryName } from './repository.js';
+import { encodeRepository, githubTokenForm, normalizeRepositoryName } from './repository.js';
 import { submissionLanguage, submissionTitle } from './solution.js';
 
 const byId = id => document.getElementById(id);
@@ -9,6 +9,7 @@ const notice = byId('notice');
 const repoInput = byId('repo-input');
 const tokenInput = byId('token-input');
 const createToken = byId('create-token');
+const noExpiration = byId('token-no-expiration');
 const retry = byId('retry');
 const queueRetry = byId('queue-retry');
 const reconnect = byId('reconnect');
@@ -56,14 +57,25 @@ function bindDraft(input, storage, key) {
 const repositoryDraft = bindDraft(repoInput, chrome.storage.local, 'repositoryDraft');
 const tokenDraft = bindDraft(tokenInput, chrome.storage.session, 'tokenDraft');
 
+function updateTokenDestination() {
+  let name = 'your repository';
+  try { name = normalizeRepositoryName(repoInput.value); } catch { /* Wait for a complete repository name. */ }
+  byId('token-destination').textContent = name;
+}
+
+repoInput.addEventListener('input', updateTokenDestination);
+
 function clearSetupFields() {
   repositoryDraft.clearField();
   tokenDraft.clearField();
+  noExpiration.checked = false;
+  updateTokenDestination();
 }
 
 function setFormBusy(busy) {
   repoInput.readOnly = busy;
   tokenInput.readOnly = busy;
+  noExpiration.disabled = busy;
   createToken.disabled = busy;
 }
 
@@ -245,22 +257,20 @@ async function run(button, operation, progress = 'Working…') {
 
 createToken.addEventListener('click', async () => {
   if (operating) return;
-  let name;
+  let url;
   try {
-    name = normalizeRepositoryName(repoInput.value);
+    url = githubTokenForm(repoInput.value, noExpiration.checked);
   } catch (error) {
     message(error.message, true);
     repoInput.focus();
     return;
   }
-  const url = new URL('https://github.com/settings/personal-access-tokens/new');
-  url.search = new URLSearchParams({ name: 'LeetGit', target_name: name.split('/')[0], expires_in: '90', contents: 'write' });
   operating = true;
   setFormBusy(true);
   try {
     await Promise.allSettled(pendingDraftWrites);
     await repositoryDraft.save();
-    await chrome.tabs.create({ url: url.href });
+    await chrome.tabs.create({ url });
   } catch {
     message('Could not save the repository draft or open GitHub’s token form. Try again.', true);
   } finally {
@@ -306,6 +316,7 @@ reconnect.addEventListener('click', () => {
   reconnecting = !reconnecting;
   clearSetupFields();
   repoInput.value = current.repository.fullName;
+  updateTokenDestination();
   render(current);
   if (reconnecting) repoInput.focus();
 });
@@ -345,5 +356,5 @@ chrome.runtime.onMessage.addListener(message => {
 });
 
 void refresh().then(() => {
-  if (!current?.repository) void Promise.allSettled([repositoryDraft.restore(), tokenDraft.restore()]);
+  if (!current?.repository) void Promise.allSettled([repositoryDraft.restore(), tokenDraft.restore()]).then(updateTokenDestination);
 }).catch(error => message(error.message, true));

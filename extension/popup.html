@@ -99,7 +99,12 @@
 
         <div class="token-instructions">
           <button id="create-token" type="button" class="text-button">Create GitHub token <span aria-hidden="true">↗</span></button>
-          <p>On GitHub, choose <strong>Only select repositories</strong>, select this repository, and grant <strong>Contents: Read and write</strong>.</p>
+          <p>On GitHub, choose <strong>Only select repositories</strong>, select <strong id="token-destination">your repository</strong>, and verify <strong>Contents: Read and write</strong>.</p>
+          <label class="checkbox token-lifetime">
+            <input id="token-no-expiration" type="checkbox" aria-describedby="token-lifetime-help">
+            Request no expiration
+          </label>
+          <p id="token-lifetime-help">Default is 366 days. GitHub may limit the lifetime.</p>
         </div>
 
         <div class="field">

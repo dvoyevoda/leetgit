@@ -27,3 +27,17 @@ export function normalizeRepositoryName(value) {
 export function encodeRepository(name) {
   return normalizeRepositoryName(name).split('/').map(encodeURIComponent).join('/');
 }
+
+export function githubTokenForm(value, noExpiration = false) {
+  const name = normalizeRepositoryName(value);
+  const [owner, repository] = name.split('/');
+  const url = new URL('https://github.com/settings/personal-access-tokens/new');
+  url.search = new URLSearchParams({
+    name: `LeetGit - ${repository}`.slice(0, 40),
+    description: `Sync LeetCode solutions to ${name}. Choose Only select repositories and select only ${repository}.`,
+    target_name: owner,
+    expires_in: noExpiration ? 'none' : '366',
+    contents: 'write',
+  });
+  return url.href;
+}

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { connectToken, syncToken } from '../extension/github.js';
-import { normalizeRepositoryName } from '../extension/repository.js';
+import { githubTokenForm, normalizeRepositoryName } from '../extension/repository.js';
 
 const token = 'github_pat_' + 'a'.repeat(24);
 const repo = { id: 42, full_name: 'owner/solutions', private: true, default_branch: 'main' };
@@ -12,6 +12,25 @@ const submission = {
 };
 const base = 'https://api.github.com/repos/owner/solutions';
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status });
+
+test('GitHub token templates prefill the repository details and use GitHub’s supported lifetime options', () => {
+  const repository = 'https://github.com/owner/my-solutions.git';
+  const form = new URL(githubTokenForm(repository));
+  assert.equal(form.origin + form.pathname, 'https://github.com/settings/personal-access-tokens/new');
+  assert.deepEqual(Object.fromEntries(form.searchParams), {
+    name: 'LeetGit - my-solutions',
+    description: 'Sync LeetCode solutions to owner/my-solutions. Choose Only select repositories and select only my-solutions.',
+    target_name: 'owner',
+    expires_in: '366',
+    contents: 'write',
+  });
+  assert.equal(new URL(githubTokenForm(repository, true)).searchParams.get('expires_in'), 'none');
+  const longRepo = `owner/${'a'.repeat(100)}`;
+  const longForm = new URL(githubTokenForm(longRepo));
+  assert.equal(longForm.searchParams.get('name').length, 40);
+  assert.ok(longForm.searchParams.get('description').includes(longRepo));
+  assert.throws(() => githubTokenForm('https://example.com/owner/repo'), /GitHub repository URL/);
+});
 
 test('direct setup accepts a full GitHub repository URL and sends only a fine-grained token', async t => {
   const reply = t.mock.method(globalThis, 'fetch', async (url, options) => {

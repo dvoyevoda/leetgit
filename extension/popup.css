@@ -356,6 +356,9 @@ input::placeholder { color: #97938b; }
 
 .token-instructions strong { color: var(--text); font-weight: 600; }
 
+.token-instructions p { overflow-wrap: anywhere; }
+.token-lifetime { margin-top: 6px; }
+
 button {
   cursor: pointer;
   font: inherit;
