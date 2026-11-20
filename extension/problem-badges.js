@@ -1,3 +1,5 @@
+import { problemStatus } from './problem-status.js';
+
 const contextKey = 'problemTabs';
 let updates = Promise.resolve();
 
@@ -12,11 +14,9 @@ async function tabContexts() {
 }
 
 function badgeFor(slug, state) {
-  if (!slug || !state?.connection) return ['', '#13804a'];
-  if (state.error && state.pending[0]?.submission.slug === slug) return ['!', '#b83e2f'];
-  const pending = state.pending.filter(item => item.submission.slug === slug).length;
+  const { error, pending, saved } = problemStatus(state, slug);
+  if (error) return ['!', '#b83e2f'];
   if (pending) return [String(pending), '#a05a00'];
-  const saved = state.last?.slug === slug || state.syncedProblems?.includes(slug);
   return [saved ? '✓' : '', '#13804a'];
 }
 

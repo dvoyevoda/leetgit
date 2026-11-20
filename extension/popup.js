@@ -10,6 +10,7 @@ const repoInput = byId('repo-input');
 const tokenInput = byId('token-input');
 const createToken = byId('create-token');
 const retry = byId('retry');
+const queueRetry = byId('queue-retry');
 const reconnect = byId('reconnect');
 const settings = byId('settings');
 const includeProblemText = byId('include-problem-text');
@@ -139,46 +140,52 @@ function showLink(link, url, repositoryUrl) {
   return !link.hidden;
 }
 
-function renderActivity({ pending, last, error }, repositoryUrl) {
-  let state = 'ready';
-  let icon = '·';
-  let title = 'Ready to sync';
-  let description = 'Submit a solution on LeetCode to get started.';
+function renderActivity({ page, slug, saved, pending, last, error }, repositoryUrl) {
+  const onProblem = page === 'problem' && !!slug;
+  const result = onProblem && last?.slug === slug ? last : null;
+  let state = onProblem ? 'ready' : 'idle';
+  let symbol = '';
+  let title = onProblem ? 'Ready to sync' : 'Open a LeetCode problem';
+  let description = onProblem ? `${problemTitle({ slug })} · Syncs when accepted.` : 'Accepted solutions sync to GitHub.';
 
-  if (error) {
+  if (page === 'leetcode') {
+    title = 'LeetCode page detected';
+    description = 'Open a problem to start syncing.';
+  } else if (onProblem && error) {
     state = 'error';
-    icon = '!';
+    symbol = '!';
     title = 'Sync needs attention';
     description = error.message;
     const retryAt = Number(error.nextAt ?? error.retryAt);
     if (retryAt > Date.now()) description += ` Retry scheduled for ${shortTime.format(retryAt)}.`;
-  } else if (pending > 0) {
+  } else if (onProblem && pending > 0) {
     state = 'pending';
-    icon = '↻';
     title = pending === 1 ? 'Solution queued' : `${pending} solutions queued`;
     description = 'Waiting to sync to GitHub.';
-  } else if (last) {
+  } else if (onProblem && (result || saved)) {
     state = 'saved';
-    icon = '✓';
-    title = statusLabels.get(last.outcome) ?? 'Solution synced';
-    description = problemTitle(last);
+    symbol = '✓';
+    title = statusLabels.get(result?.outcome) ?? 'Solution saved';
+    description = problemTitle(result ?? { slug });
   }
 
   byId('activity').dataset.state = state;
-  byId('status-icon').textContent = icon;
+  showText(byId('status-symbol'), symbol);
+  byId('sync-icon').toggleAttribute('hidden', !!symbol);
   byId('sync-status').textContent = title;
   byId('sync-description').textContent = description;
-  renderMetadata(state === 'saved' ? last : null);
+  byId('page-detected').hidden = !onProblem;
+  renderMetadata(state === 'saved' ? result : null);
 
   const file = byId('file');
   byId('file-label').textContent = state === 'saved' ? 'View code' : 'View last saved code';
-  const hasFile = showLink(file, last?.url, repositoryUrl);
-  const hasReadme = showLink(byId('readme'), last?.readmeUrl, repositoryUrl);
+  const hasFile = showLink(file, result?.url, repositoryUrl);
+  const hasReadme = showLink(byId('readme'), result?.readmeUrl, repositoryUrl);
   byId('activity-links').hidden = !(hasFile || hasReadme);
-  retry.hidden = pending < 1;
+  retry.hidden = !onProblem || pending < 1;
 }
 
-function render(state) {
+function render(state, preserveNotice = false) {
   current = state;
   const { repository } = state;
   connected.hidden = !repository;
@@ -187,7 +194,8 @@ function render(state) {
   byId('setup-title').textContent = reconnecting ? 'Reconnect repository' : 'Connect a repository';
   byId('setup-purpose').hidden = reconnecting;
   includeProblemText.checked = state.includeProblemText !== false;
-  message('');
+  queueRetry.hidden = !!state.pending || !(state.totalPending > 0);
+  if (!preserveNotice) message('');
   if (!repository) return;
 
   const link = byId('repository');
@@ -201,15 +209,16 @@ function render(state) {
 }
 
 async function command(type, data = {}) {
-  const result = await chrome.runtime.sendMessage({ type, ...data });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const result = await chrome.runtime.sendMessage({ type, ...data, tabId: tab?.id });
   if (!result?.ok) throw new Error(result?.error ?? 'Could not reach LeetGit. Try reopening it.');
   return result;
 }
 
-async function refresh() {
+async function refresh(preserveNotice = false) {
   const request = ++revision;
   const state = await command('relay.status');
-  if (request === revision && !operating) render(state);
+  if (request === revision && !operating) render(state, preserveNotice);
 }
 
 async function run(button, operation, progress = 'Working…') {
@@ -230,7 +239,7 @@ async function run(button, operation, progress = 'Working…') {
     operating = false;
     button.disabled = false;
     setFormBusy(false);
-    if (complete) void refresh().catch(() => {});
+    void refresh(!complete).catch(() => {});
   }
 }
 
@@ -257,6 +266,7 @@ createToken.addEventListener('click', async () => {
   } finally {
     operating = false;
     setFormBusy(false);
+    void refresh(true).catch(() => {});
   }
 });
 
@@ -301,7 +311,8 @@ reconnect.addEventListener('click', () => {
 });
 
 byId('disconnect').addEventListener('click', event => {
-  if (current?.pending && !confirm('Disconnect and discard the solutions waiting to sync?')) return;
+  if (operating) return;
+  if ((current?.totalPending ?? current?.pending) && !confirm('Disconnect and discard the solutions waiting to sync?')) return;
   void run(event.currentTarget, async () => {
     await Promise.allSettled(pendingDraftWrites);
     const state = await command('relay.disconnect');
@@ -321,10 +332,16 @@ includeProblemText.addEventListener('change', () => {
   void run(includeProblemText, () => command('relay.setProblemText', { enabled }), '');
 });
 
-retry.addEventListener('click', () => void run(retry, () => command('relay.retry'), 'Retrying sync…'));
+for (const button of [retry, queueRetry]) {
+  button.addEventListener('click', () => void run(button, () => command('relay.retry'), 'Retrying sync…'));
+}
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.relay && !operating) void refresh().catch(() => {});
+});
+
+chrome.runtime.onMessage.addListener(message => {
+  if (message?.type === 'relay.contextChanged' && !operating) void refresh(true).catch(() => {});
 });
 
 void refresh().then(() => {

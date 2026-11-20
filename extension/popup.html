@@ -27,10 +27,16 @@
 
       <div id="activity" class="activity" data-state="ready" aria-live="polite">
         <div class="activity-heading">
-          <span id="status-icon" class="status-icon" aria-hidden="true">·</span>
+          <span class="status-icon" aria-hidden="true">
+            <svg id="sync-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+              <path d="M4 12a8 8 0 0 1 13.8-5.5L20 9m0-5v5h-5m5 3a8 8 0 0 1-13.8 5.5L4 15m0 5v-5h5"/>
+            </svg>
+            <span id="status-symbol" hidden></span>
+          </span>
           <div>
             <h2 id="sync-status">Ready to sync</h2>
             <p id="sync-description"></p>
+            <p id="page-detected" class="page-detected" hidden>LeetCode page detected</p>
           </div>
         </div>
 
@@ -68,6 +74,7 @@
           </label>
           <p id="problem-text-help">Adds the visible problem description to GitHub READMEs. Only share descriptions you have permission to use.</p>
           <div class="actions">
+            <button id="queue-retry" type="button" class="text-button" hidden>Retry queued sync</button>
             <button id="reconnect" type="button" class="text-button">Reconnect</button>
             <button id="disconnect" type="button" class="text-button">Disconnect</button>
           </div>

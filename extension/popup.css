@@ -20,16 +20,22 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
-html { background: #111; }
+html { background: var(--background); }
 
 body {
-  width: 354px;
-  margin: 3px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 13px;
+  width: 360px;
+  margin: 0;
   color: var(--text);
   background: var(--background);
+}
+
+body::after {
+  position: fixed;
+  z-index: 1;
+  inset: 0;
+  box-shadow: inset 0 0 9px #0004;
+  pointer-events: none;
+  content: "";
 }
 
 h1, h2, p, dl, dd { margin: 0; }
@@ -54,6 +60,7 @@ h2 {
   padding: 12px 17px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
+  box-shadow: 0 2px 7px #0003;
 }
 
 .brand img { display: block; flex: none; }
@@ -83,6 +90,7 @@ main { padding: 16px; }
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
+  box-shadow: 0 2px 6px #0002;
 }
 
 .destination-name { min-width: 0; }
@@ -125,6 +133,7 @@ main { padding: 16px; }
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
+  box-shadow: 0 2px 6px #0002;
 }
 
 .activity[data-state="saved"] {
@@ -137,7 +146,7 @@ main { padding: 16px; }
   --status-background: var(--danger-background);
 }
 
-.activity[data-state="ready"] {
+.activity[data-state="idle"] {
   --status-color: var(--muted);
   --status-background: var(--raised);
 }
@@ -169,6 +178,12 @@ main { padding: 16px; }
 }
 
 .activity[data-state="saved"] #sync-description { color: var(--text); }
+
+.page-detected {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
 
 .submission-meta {
   display: flex;

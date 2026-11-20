@@ -36,7 +36,7 @@ The README includes the full visible text of non-premium problems by default whe
 3. Click **Submit** and wait for the **Saved to GitHub** or **Updated on GitHub** message. The Chrome toolbar shows a green check on that problem after a successful sync. Navigate to an unsynced problem and it clears.
 4. Open the problem README from the popup or the on-page message. Check the results and confirm the source file matches what you submitted. A fresh resubmission can update the results even when its code is identical. Resubmit earlier solves to add READMEs for them.
 
-Open the LeetGit popup to check sync status. If a sync fails, correct the reported issue and click **Retry now**.
+Open the LeetGit popup to see status for the problem in the active LeetCode tab. If a sync fails, correct the reported issue and click **Retry now**. Other queued syncs can be retried from **Settings**.
 
 ## Data and access
 

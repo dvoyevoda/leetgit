@@ -20,7 +20,11 @@ function page(pathname, { prerendering = false, topFrame = true } = {}) {
     } },
   });
   return { window, document, messages, receive(message, senderId) {
-    for (const listener of listeners) listener(message, { id: senderId });
+    let response;
+    for (const listener of listeners) {
+      listener(message, { id: senderId }, value => { response = structuredClone(value); });
+    }
+    return response;
   } };
 }
 
@@ -60,6 +64,18 @@ test('the trusted extension can refresh unchanged context once the tab finishes 
   assert.equal(messages.length, 1);
   receive({ type: 'relay.refreshContext' }, 'leetgit-fixture');
   assert.deepEqual(messages.map(message => message.slug), ['two-sum', 'two-sum']);
+});
+
+test('a popup context query reads the current path without waiting for a navigation event', () => {
+  const { window, receive, messages } = page('/problems/two-sum/');
+  const query = { type: 'relay.readContext' };
+  assert.equal(receive(query, 'another-extension'), undefined);
+  assert.deepEqual(receive(query, 'leetgit-fixture'), { slug: 'two-sum' });
+  window.location.pathname = '/problems/add-two-numbers/submissions/';
+  assert.deepEqual(receive(query, 'leetgit-fixture'), { slug: 'add-two-numbers' });
+  window.location.pathname = '/problemset/';
+  assert.deepEqual(receive(query, 'leetgit-fixture'), { slug: null });
+  assert.equal(messages.length, 1);
 });
 
 test('the script skips child frames and waits until a prerendered page is activated', () => {

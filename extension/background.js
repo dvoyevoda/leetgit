@@ -3,6 +3,7 @@ import { workerOrigin } from './config.js';
 import { connectToken, expectJson, SyncError, syncToken } from './github.js';
 import { normalizeSubmission, submissionTitle } from './solution.js';
 import { refreshProblemBadges, updateProblemContext } from './problem-badges.js';
+import { problemStatus, rememberProblemResult } from './problem-status.js';
 
 // Keep the installed retry alarm when upgrading from v0.1.0.
 const alarmName = 'leetrelay-sync';
@@ -33,9 +34,35 @@ function problemTextEnabled(state) {
   return state.problemTextPreference !== false;
 }
 
-function publicState(state) {
-  const { connection, pending, last, error } = state;
-  return { repository: connection?.repository ?? null, pending: pending.length, last, error, includeProblemText: problemTextEnabled(state) };
+function validSlug(value) {
+  return typeof value === 'string' && /^[a-z0-9][a-z0-9-]{0,149}$/.test(value);
+}
+
+async function popupContext(tabId) {
+  try {
+    if (!Number.isInteger(tabId)) {
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      tabId = tab?.id;
+    }
+    if (Number.isInteger(tabId)) {
+      const context = await chrome.tabs.sendMessage(tabId, { type: 'relay.readContext' }, { frameId: 0 });
+      if (validSlug(context?.slug)) return { page: 'problem', slug: context.slug };
+      if (context?.slug === null) return { page: 'leetcode', slug: null };
+    }
+  } catch { /* Tabs without this extension’s LeetCode script have no context. */ }
+  return { page: 'other', slug: null };
+}
+
+async function publicState(state, tabId) {
+  const context = await popupContext(tabId);
+  const { connection, pending } = state;
+  return {
+    ...context,
+    ...problemStatus(state, context.slug),
+    repository: connection?.repository ?? null,
+    totalPending: pending.length,
+    includeProblemText: problemTextEnabled(state),
+  };
 }
 
 async function clearSetupDrafts() {
@@ -66,6 +93,7 @@ async function setConnection(connection) {
   if (!sameRepo) {
     state.recent = [];
     state.syncedProblems = [];
+    state.results = {};
     state.last = null;
     delete state.problemTextPreference;
   }
@@ -73,7 +101,7 @@ async function setConnection(connection) {
   await saveState(state);
   await clearSetupDrafts();
   await ensureAlarm();
-  return publicState(state);
+  return state;
 }
 
 function notifyTab(tabId, slug, status, details) {
@@ -104,9 +132,9 @@ async function enqueue(input, tabId) {
 
 async function flush(force = false) {
   const state = await readState();
-  if (!state.connection || !state.pending.length) return publicState(state);
+  if (!state.connection || !state.pending.length) return state;
   if (!force && state.error && (!state.error.nextAt || state.error.nextAt > Date.now())) {
-    return publicState(state);
+    return state;
   }
   const connection = state.connection;
   const item = state.pending[0];
@@ -130,13 +158,12 @@ async function flush(force = false) {
     state.pending.shift();
     state.recent.push(item.submission.id);
     state.recent = state.recent.slice(-maxRecent);
-    const previousProblems = state.syncedProblems ?? (state.last?.slug ? [state.last.slug] : []);
-    state.syncedProblems = previousProblems.includes(submission.slug) ? previousProblems : [...previousProblems, submission.slug];
-    state.last = {
-      ...result, id: submission.id, slug: submission.slug, title,
+    rememberProblemResult(state, {
+      outcome: result.outcome, path: result.path, url: result.url, readmeUrl: result.readmeUrl,
+      id: submission.id, slug: submission.slug, title,
       difficulty: submission.problem?.difficulty, language: submission.language,
       acceptedAt: submission.acceptedAt, stats: submission.stats,
-    };
+    });
     state.error = null;
     feedback = { status: result.outcome, title, url: result.readmeUrl ?? result.url };
   } catch (error) {
@@ -154,7 +181,7 @@ async function flush(force = false) {
   await saveState(state);
   if (feedback) notifyTab(item.tabId, submission.slug, feedback.status, feedback);
   if (!state.error && state.pending.length) scheduleFlush();
-  return publicState(state);
+  return state;
 }
 
 function scheduleFlush() {
@@ -169,7 +196,7 @@ async function disconnect() {
   const cleared = { connection: null, pending: [], recent: [], syncedProblems: [], last: null, error: null };
   await saveState(cleared);
   await clearSetupDrafts();
-  return publicState(cleared);
+  return cleared;
 }
 
 async function setProblemText(enabled) {
@@ -182,7 +209,11 @@ async function setProblemText(enabled) {
     }
   }
   await saveState(state);
-  return publicState(state);
+  return state;
+}
+
+function notifyPopupOfContextChange(tabId) {
+  void chrome.runtime.sendMessage({ type: 'relay.contextChanged', tabId }).catch(() => {});
 }
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
@@ -193,8 +224,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   let operation;
   if (message?.type === 'leetcode.context' && fromLeetcode) {
     const slug = message.slug;
-    if (slug !== null && (typeof slug !== 'string' || !/^[a-z0-9][a-z0-9-]{0,149}$/.test(slug))) return;
-    operation = updateProblemContext(sender.tab.id, slug, readState);
+    if (slug !== null && !validSlug(slug)) return;
+    operation = updateProblemContext(sender.tab.id, slug, readState).then(() => notifyPopupOfContextChange(sender.tab.id));
   } else if (message?.type === 'leetcode.accepted' && fromLeetcode) {
     operation = serial(() => enqueue(message.submission, sender.tab.id)).then(result => {
       if (result.queued) scheduleFlush();
@@ -202,7 +233,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     });
   } else if (fromPopup) {
     switch (message?.type) {
-      case 'relay.status': operation = readState().then(publicState); break;
+      case 'relay.status': operation = readState(); break;
       case 'relay.connectToken':
         operation = connectToken(message.name, message.token).then(connection => serial(() => setConnection(connection)));
         break;
@@ -214,9 +245,9 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       case 'relay.retry': operation = serial(() => flush(true)); break;
       default: return;
     }
-    if (message.type.startsWith('relay.connect')) operation = operation.then(state => {
-      if (state.pending) scheduleFlush();
-      return state;
+    operation = operation.then(state => {
+      if (message.type.startsWith('relay.connect') && state.pending.length) scheduleFlush();
+      return publicState(state, message.tabId);
     });
   } else return;
 
@@ -242,11 +273,16 @@ function forgetTab(tabId) {
 }
 
 chrome.tabs.onUpdated.addListener((tabId, change) => {
-  if (change.status === 'loading') forgetTab(tabId);
+  if (change.status === 'loading') {
+    forgetTab(tabId);
+    notifyPopupOfContextChange(tabId);
+  }
   // Chrome also reports loading/complete for same-document result navigation.
   if (change.status === 'complete') {
     void chrome.tabs.sendMessage(tabId, { type: 'relay.refreshContext' }, { frameId: 0 }).catch(() => {});
+    notifyPopupOfContextChange(tabId);
   }
 });
+chrome.tabs.onActivated.addListener(({ tabId }) => notifyPopupOfContextChange(tabId));
 chrome.tabs.onRemoved.addListener(forgetTab);
 chrome.tabs.onReplaced.addListener((_added, removed) => forgetTab(removed));

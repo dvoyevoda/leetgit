@@ -50,9 +50,11 @@ test('the background restores pending code after restart and restricts which sen
   let access;
   const feedback = [];
   const badges = new Map();
+  const pages = new Map([[1, 'two-sum'], [2, 'add-two-numbers'], [3, null]]);
   const runtime = {
     id: 'test-id', getURL: path => `chrome-extension://test-id/${path}`,
     onMessage: runtimeEvent(), onInstalled: runtimeEvent(), onStartup: runtimeEvent(),
+    async sendMessage() {},
   };
   const chrome = {
     runtime,
@@ -70,8 +72,17 @@ test('the background restores pending code after restart and restricts which sen
       },
     },
     action: { async setBadgeText(value) { badges.set(value.tabId, value.text); }, async setBadgeBackgroundColor() {} },
-    tabs: { onUpdated: runtimeEvent(), onRemoved: runtimeEvent(), onReplaced: runtimeEvent(),
-      async sendMessage(tabId, data) { feedback.push({ tabId, ...data }); } },
+    tabs: {
+      onUpdated: runtimeEvent(), onRemoved: runtimeEvent(), onReplaced: runtimeEvent(), onActivated: runtimeEvent(),
+      async query() { return [{ id: 1 }]; },
+      async sendMessage(tabId, data) {
+        if (data.type === 'relay.readContext') {
+          if (!pages.has(tabId)) throw new Error('No LeetCode content script');
+          return { slug: pages.get(tabId) };
+        }
+        if (data.type === 'relay.feedback') feedback.push({ tabId, ...data });
+      },
+    },
     alarms: { onAlarm: runtimeEvent(), async get() {}, async create() {} },
   };
   globalThis.chrome = chrome;
@@ -125,6 +136,10 @@ test('the background restores pending code after restart and restricts which sen
   assert.equal(storage.relay.pending[0].submission.problem.descriptionMarkdown, 'A complete fixture description.');
   assert.ok(storage.relay.error.nextAt > Date.now());
   assert.deepEqual(feedback.map(item => item.status), ['queued', 'delayed']);
+  const otherPending = await send({ type: 'relay.status', tabId: 2 }, popup);
+  assert.equal(otherPending.pending, 0);
+  assert.equal(otherPending.totalPending, 1);
+  assert.equal(otherPending.error, null);
 
   offline = false;
   await import('../extension/background.js?restarted');
@@ -137,6 +152,14 @@ test('the background restores pending code after restart and restricts which sen
   assert.equal(badges.get(1), '✓');
   assert.equal(badges.get(2), '');
   assert.equal(JSON.stringify(state).includes(token), false);
+  assert.equal(state.page, 'problem');
+  assert.equal(state.saved, true);
+  for (const [tabId, expected] of [[2, 'problem'], [3, 'leetcode'], [4, 'other']]) {
+    const unseen = await send({ type: 'relay.status', tabId }, popup);
+    assert.equal(unseen.page, expected);
+    assert.equal(unseen.last, null);
+    assert.equal(unseen.saved, false);
+  }
   assert.deepEqual(await send({ type: 'leetcode.accepted', submission }, leetcode), { ok: true, queued: false });
   assert.equal(commits, 1);
   await send({ type: 'leetcode.context', slug: 'add-two-numbers' }, leetcode);
