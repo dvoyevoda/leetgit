@@ -38,6 +38,14 @@ The README includes the full visible text of non-premium problems by default whe
 
 Open the LeetGit popup to see status for the problem in the active LeetCode tab. If a sync fails, correct the reported issue and click **Retry now**. Other queued syncs can be retried from **Settings**.
 
+## Help and feedback
+
+- **GitHub denies access or the token expired.** Open **Settings → Reconnect** and use a fine-grained token scoped to the destination repository with **Contents → Read and write**. If your organization requires approval, check the token’s status on GitHub.
+- **The destination has no default branch or rejects commits.** Initialize an empty repository with a README. If the default branch is protected, use a destination repository whose default branch allows you to commit directly.
+- **The popup doesn't detect LeetCode.** After installing or updating the extension, refresh the `leetcode.com` problem tab. LeetGit syncs when **Submit** receives an **Accepted** result.
+
+If the problem persists, include the LeetGit version from `chrome://extensions`, the popup error, and the steps to reproduce it. Remove tokens, solution code, and private repository details before posting. [Report a bug or share feedback on GitHub](https://github.com/dvoyevoda/leetgit/issues/new)
+
 ## Data and access
 
 In token mode, Chrome stores the token locally and LeetGit sends submissions and the token directly to the GitHub API. GitHub enforces the token’s scope, so select exactly one repository when generating the token. LeetGit cannot inspect the full grant list. GitHub fine-grained tokens also have read access to public repositories. You can revoke yours in [personal access token settings](https://github.com/settings/personal-access-tokens). GitHub App mode sends the submitted source through the configured companion on its way to GitHub.

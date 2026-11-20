@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LeetGit",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Sync accepted LeetCode solutions to one GitHub repository you choose.",
   "minimum_chrome_version": "120",
   "permissions": ["storage", "alarms", "identity"],

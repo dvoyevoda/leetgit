@@ -289,11 +289,20 @@ main { padding: 16px; }
   margin-top: 7px;
 }
 
-.settings-content .credit {
+.settings-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 12px;
   margin-top: 8px;
   padding-top: 7px;
   border-top: 1px solid var(--line);
+  font-size: 11px;
 }
+
+.settings-footer .credit { margin: 0; }
+.help-link { font-weight: 600; }
 
 .credit a {
   color: inherit;
