@@ -48,4 +48,4 @@ Run `npm test` from the project root with Node.js 22 or newer. The extension its
 
 ## License and credit
 
-LeetGit is independently written and released under the [MIT License](LICENSE). The idea was inspired by [LeetSync](https://github.com/LeetSync/LeetSync).
+LeetGit is maintained by [@dvoyevoda](https://github.com/dvoyevoda) and released under the [MIT License](LICENSE). The idea was inspired by [LeetSync](https://github.com/LeetSync/LeetSync).
