@@ -38,7 +38,7 @@ export async function expectJson(response, service) {
   const retryAfter = Number(response.headers.get('Retry-After')) * 1000;
   if (status === 429 || response.headers.get('X-RateLimit-Remaining') === '0' ||
       (status === 403 && retryAfter > 0)) {
-    throw new SyncError(`${service} rate limit reached. LeetRelay will retry.`, {
+    throw new SyncError(`${service} rate limit reached. LeetGit will retry.`, {
       retry: true, retryAfter: Math.max(retryAt, retryAfter, 60000),
     });
   }

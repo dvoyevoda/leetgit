@@ -3,6 +3,7 @@ import { workerOrigin } from './config.js';
 import { connectToken, expectJson, SyncError, syncToken } from './github.js';
 import { normalizeSubmission } from './solution.js';
 
+// Keep the installed retry alarm when upgrading from v0.1.0.
 const alarmName = 'leetrelay-sync';
 const maxPending = 20;
 const maxRecent = 200;
@@ -66,7 +67,7 @@ async function enqueue(input) {
     return { queued: false };
   }
   if (state.pending.length >= maxPending) {
-    throw new SyncError('LeetRelay’s queue is full. Retry your pending syncs, then resubmit this solution.');
+    throw new SyncError('LeetGit’s queue is full. Retry your pending syncs, then resubmit this solution.');
   }
   await ensureAlarm();
   state.pending.push({ submission, attempts: 0 });
@@ -102,7 +103,7 @@ async function flush(force = false) {
     const retry = error instanceof SyncError ? error.retry : true;
     const delay = Math.min(2 ** Math.min(item.attempts - 1, 6) * 60000, 30 * 60000);
     state.error = {
-      message: error instanceof SyncError ? error.message : 'Sync was interrupted. LeetRelay will retry.',
+      message: error instanceof SyncError ? error.message : 'Sync was interrupted. LeetGit will retry.',
       nextAt: retry ? Date.now() + Math.max(delay, error.retryAfter || 0) : null,
     };
   }
@@ -156,7 +157,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
 
   operation.then(
     result => respond({ ok: true, ...result }),
-    error => respond({ ok: false, error: error instanceof SyncError ? error.message : 'LeetRelay could not complete that action.' }),
+    error => respond({ ok: false, error: error instanceof SyncError ? error.message : 'LeetGit could not complete that action.' }),
   );
   return true;
 });

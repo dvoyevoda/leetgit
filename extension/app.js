@@ -17,7 +17,7 @@ export async function connectApp() {
   try {
     url = new URL(await chrome.identity.launchWebAuthFlow({ url: start.href, interactive: true }));
   } catch {
-    throw new SyncError('GitHub setup was closed. Open LeetRelay to try again.');
+    throw new SyncError('GitHub setup was closed. Open LeetGit to try again.');
   }
   const hash = url.hash;
   url.hash = '';

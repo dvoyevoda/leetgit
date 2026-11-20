@@ -44,7 +44,7 @@ function render(state) {
 
 async function command(type, data = {}) {
   const result = await chrome.runtime.sendMessage({ type, ...data });
-  if (!result?.ok) throw new Error(result?.error ?? 'Could not reach LeetRelay. Try reopening it.');
+  if (!result?.ok) throw new Error(result?.error ?? 'Could not reach LeetGit. Try reopening it.');
   return result;
 }
 
@@ -73,7 +73,7 @@ byId('create-token').addEventListener('click', () => {
     return;
   }
   const url = new URL('https://github.com/settings/personal-access-tokens/new');
-  url.search = new URLSearchParams({ name: 'LeetRelay', target_name: name.split('/')[0], expires_in: '90', contents: 'write' });
+  url.search = new URLSearchParams({ name: 'LeetGit', target_name: name.split('/')[0], expires_in: '90', contents: 'write' });
   void chrome.storage.local.set({ repositoryDraft: name })
     .then(() => chrome.tabs.create({ url: url.href }))
     .catch(() => message('Could not open GitHub’s token form. Try again.', true));

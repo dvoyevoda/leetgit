@@ -1,5 +1,5 @@
 (() => {
-  const EVENT = "leetrelay:accepted-submission";
+  const EVENT = "leetgit:accepted-submission";
   const MAX_TRACKED = 64;
   const MAX_AGE_MS = 10 * 60 * 1000;
   const origin = window.location.origin;

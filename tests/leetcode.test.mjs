@@ -152,7 +152,7 @@ test("XHR only syncs an accepted practice submission correlated to the posted co
 test("the isolated script ignores frames, foreign origins, and unsafe submission fields", () => {
   const { dispatchMessage, messages } = page(() => { throw new Error("No request expected"); });
   const packet = {
-    type: "leetrelay:accepted-submission",
+    type: "leetgit:accepted-submission",
     submission: {
       id: "981", slug: "two-sum", language: "python3", code: "valid-code\n",
       url: "https://other.example/", acceptedAt: "2026-11-20T10:00:00-05:00",

@@ -3,7 +3,7 @@
 
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.origin !== ORIGIN) return;
-    if (event.data?.type !== "leetrelay:accepted-submission") return;
+    if (event.data?.type !== "leetgit:accepted-submission") return;
 
     const submission = event.data.submission;
     if (!submission || typeof submission !== "object") return;
