@@ -2,7 +2,7 @@ import { appRequest, connectApp } from './app.js';
 import { workerOrigin } from './config.js';
 import { connectToken, expectJson, SyncError, syncToken } from './github.js';
 import { normalizeSubmission, submissionTitle } from './solution.js';
-import { currentProblemInTab, refreshProblemBadges, updateProblemContext } from './problem-badges.js';
+import { refreshProblemBadges, updateProblemContext } from './problem-badges.js';
 
 // Keep the installed retry alarm when upgrading from v0.1.0.
 const alarmName = 'leetrelay-sync';
@@ -78,9 +78,7 @@ async function setConnection(connection) {
 
 function notifyTab(tabId, slug, status, details) {
   if (!Number.isInteger(tabId)) return;
-  void currentProblemInTab(tabId).then(current => {
-    if (current === slug) return chrome.tabs.sendMessage(tabId, { type: 'relay.feedback', status, ...details }, { frameId: 0 });
-  }).catch(() => {});
+  void chrome.tabs.sendMessage(tabId, { type: 'relay.feedback', slug, status, ...details }, { frameId: 0 }).catch(() => {});
 }
 
 async function enqueue(input, tabId) {
@@ -245,6 +243,10 @@ function forgetTab(tabId) {
 
 chrome.tabs.onUpdated.addListener((tabId, change) => {
   if (change.status === 'loading') forgetTab(tabId);
+  // Chrome also reports loading/complete for same-document result navigation.
+  if (change.status === 'complete') {
+    void chrome.tabs.sendMessage(tabId, { type: 'relay.refreshContext' }, { frameId: 0 }).catch(() => {});
+  }
 });
 chrome.tabs.onRemoved.addListener(forgetTab);
 chrome.tabs.onReplaced.addListener((_added, removed) => forgetTab(removed));

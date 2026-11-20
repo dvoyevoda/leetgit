@@ -89,6 +89,8 @@
   }
 
   chrome.runtime.onMessage.addListener((message, sender) => {
-    if (sender.id === chrome.runtime.id && message?.type === 'relay.feedback') show(message);
+    if (sender.id !== chrome.runtime.id || message?.type !== 'relay.feedback') return;
+    const slug = /^\/problems\/([a-z0-9][a-z0-9-]{0,149})(?:\/|$)/.exec(window.location.pathname)?.[1];
+    if (slug && message.slug === slug) show(message);
   });
 })();

@@ -39,10 +39,6 @@ export function updateProblemContext(tabId, slug, readState) {
   });
 }
 
-export async function currentProblemInTab(tabId) {
-  return (await tabContexts())[tabId];
-}
-
 export function refreshProblemBadges(state) {
   return schedule(async () => {
     const contexts = await tabContexts();
