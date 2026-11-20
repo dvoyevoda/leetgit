@@ -98,12 +98,18 @@ export function normalizeSubmission(input) {
   return normalized;
 }
 
-export function solutionFile(submission) {
+export function problemFolder({ slug, problem }) {
+  const number = asText(problem?.frontendId, 32);
+  return /^\d{1,10}$/.test(number) && Number(number) > 0
+    ? `${Number(number)}-${slug}` : slug;
+}
+
+export function solutionFile(submission, folder) {
   const { id, slug, language, code, url, problem } = normalizeSubmission(submission);
   const extension = extensions.get(language) ?? 'txt';
   const title = submissionTitle({ slug, problem });
   return {
-    path: `solutions/${slug}/${language}.${extension}`,
+    path: `solutions/${folder ?? problemFolder({ slug, problem })}/${language}.${extension}`,
     message: `Solve ${title} (${submissionLanguage(language)})\n\nLeetCode submission ${id}\n${url}`,
     content: code,
   };
@@ -127,22 +133,26 @@ function packState(value) {
   return btoa(binary);
 }
 
-function unpackState(block, slug) {
+function readSavedState(block) {
   try {
     const data = /^<!-- leetgit:state ([A-Za-z0-9+/=]{1,32768}) -->/m.exec(block)?.[1];
-    const raw = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(data), char => char.charCodeAt(0))));
-    if (raw.slug !== slug || !Array.isArray(raw.rows)) return {};
-    const problem = normalizeProblem(raw.problem);
-    const rows = raw.rows.slice(0, 32).flatMap(row => {
-      if (!row || typeof row.id !== 'string' || !/^\d{1,20}$/.test(row.id) ||
-          typeof row.language !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,31}$/.test(row.language) ||
-          typeof row.acceptedAt !== 'string' || !Number.isFinite(Date.parse(row.acceptedAt))) return [];
-      return [{ id: row.id, language: row.language, acceptedAt: new Date(row.acceptedAt).toISOString(), stats: normalizeStats(row.stats) }];
-    });
-    return { problem, rows };
+    return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(data), char => char.charCodeAt(0))));
   } catch {
-    return {};
+    return null;
   }
+}
+
+function unpackState(block, slug) {
+  const raw = readSavedState(block);
+  if (raw?.slug !== slug || !Array.isArray(raw.rows)) return {};
+  const problem = normalizeProblem(raw.problem);
+  const rows = raw.rows.slice(0, 32).flatMap(row => {
+    if (!row || typeof row.id !== 'string' || !/^\d{1,20}$/.test(row.id) ||
+        typeof row.language !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,31}$/.test(row.language) ||
+        typeof row.acceptedAt !== 'string' || !Number.isFinite(Date.parse(row.acceptedAt))) return [];
+    return [{ id: row.id, language: row.language, acceptedAt: new Date(row.acceptedAt).toISOString(), stats: normalizeStats(row.stats) }];
+  });
+  return { problem, rows };
 }
 
 function findBlock(text, start, end) {
@@ -165,6 +175,13 @@ function findBlock(text, start, end) {
     offset += line.length + 1;
   }
   return null;
+}
+
+export function readmeProblemSlug(readme) {
+  if (typeof readme !== 'string') return null;
+  const block = findBlock(readme, startMarker, endMarker);
+  const slug = readSavedState(block?.body ?? '')?.slug;
+  return typeof slug === 'string' && /^[a-z0-9][a-z0-9-]{0,149}$/.test(slug) ? slug : null;
 }
 
 function measured(value, percentile) {
@@ -190,10 +207,10 @@ function codePreview(code, language) {
   return `${fence}${lexer}\n${code}${code.endsWith('\n') ? '' : '\n'}${fence}`;
 }
 
-export function problemReadme(input, existingReadme = null) {
+export function problemReadme(input, existingReadme = null, folder) {
   const submission = normalizeSubmission(input);
   const { slug, id, language, code, acceptedAt, stats, includeProblemText } = submission;
-  const path = `solutions/${slug}/README.md`;
+  const path = `solutions/${folder ?? problemFolder(submission)}/README.md`;
   const existing = typeof existingReadme === 'string' ? existingReadme : '';
   const block = findBlock(existing, startMarker, endMarker);
   const previous = unpackState(block?.body ?? '', slug);

@@ -8,6 +8,7 @@ const repo = { id: 42, full_name: 'owner/solutions', private: true, default_bran
 const submission = {
   id: '101', slug: 'two-sum', language: 'python3', code: '# café 🧩\nreturn a + b\n',
   acceptedAt: '2026-11-20T18:00:00.000Z',
+  problem: { frontendId: '1', paidOnly: false, descriptionMarkdown: 'A complete fixture description.' },
 };
 const base = 'https://api.github.com/repos/owner/solutions';
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status });
@@ -44,23 +45,33 @@ function runtimeEvent() {
 }
 
 test('the background restores pending code after restart and restricts which senders can sync', async t => {
-  let storage = {};
+  let storage = { repositoryDraft: 'https://github.com/owner/solutions' };
+  const session = { tokenDraft: 'temporary fixture' };
   let access;
   const feedback = [];
-  const badges = [];
+  const badges = new Map();
   const runtime = {
     id: 'test-id', getURL: path => `chrome-extension://test-id/${path}`,
     onMessage: runtimeEvent(), onInstalled: runtimeEvent(), onStartup: runtimeEvent(),
   };
   const chrome = {
     runtime,
-    storage: { local: {
-      async setAccessLevel(value) { access = value.accessLevel; },
-      async get() { return structuredClone(storage); },
-      async set(value) { storage = structuredClone(value); },
-    } },
-    action: { async setBadgeText(value) { badges.push(value.text); }, async setBadgeBackgroundColor() {} },
-    tabs: { async sendMessage(tabId, data) { feedback.push({ tabId, ...data }); } },
+    storage: {
+      local: {
+        async setAccessLevel(value) { access = value.accessLevel; },
+        async get() { return structuredClone(storage); },
+        async set(value) { storage = { ...storage, ...structuredClone(value) }; },
+        async remove(key) { delete storage[key]; },
+      },
+      session: {
+        async get() { return structuredClone(session); },
+        async set(value) { Object.assign(session, structuredClone(value)); },
+        async remove(key) { delete session[key]; },
+      },
+    },
+    action: { async setBadgeText(value) { badges.set(value.tabId, value.text); }, async setBadgeBackgroundColor() {} },
+    tabs: { onUpdated: runtimeEvent(), onRemoved: runtimeEvent(), onReplaced: runtimeEvent(),
+      async sendMessage(tabId, data) { feedback.push({ tabId, ...data }); } },
     alarms: { onAlarm: runtimeEvent(), async get() {}, async create() {} },
   };
   globalThis.chrome = chrome;
@@ -93,10 +104,16 @@ test('the background restores pending code after restart and restricts which sen
   });
   const connect = { type: 'relay.connectToken', name: 'owner/solutions', token };
   assert.equal(await send(connect, leetcode), undefined);
-  assert.equal((await send(connect, popup)).repository.id, 42);
+  const connected = await send(connect, popup);
+  assert.equal(connected.repository.id, 42);
+  assert.equal(connected.includeProblemText, true);
+  assert.equal(storage.repositoryDraft, undefined);
+  assert.equal(session.tokenDraft, undefined);
   assert.equal(access, 'TRUSTED_CONTEXTS');
   assert.equal(await send({ type: 'leetcode.accepted', submission }, popup), undefined);
   assert.equal(await send({ type: 'leetcode.accepted', submission }, { ...leetcode, frameId: 1 }), undefined);
+  await send({ type: 'leetcode.context', slug: 'two-sum' }, leetcode);
+  await send({ type: 'leetcode.context', slug: 'add-two-numbers' }, { ...leetcode, tab: { id: 2 } });
 
   offline = true;
   assert.deepEqual(await send({ type: 'leetcode.accepted', submission }, leetcode), { ok: true, queued: true });
@@ -104,6 +121,8 @@ test('the background restores pending code after restart and restricts which sen
     await new Promise(resolve => setImmediate(resolve));
   }
   assert.equal(storage.relay.pending[0].submission.code, submission.code);
+  assert.equal(storage.relay.pending[0].submission.includeProblemText, true);
+  assert.equal(storage.relay.pending[0].submission.problem.descriptionMarkdown, 'A complete fixture description.');
   assert.ok(storage.relay.error.nextAt > Date.now());
   assert.deepEqual(feedback.map(item => item.status), ['queued', 'delayed']);
 
@@ -112,11 +131,21 @@ test('the background restores pending code after restart and restricts which sen
   const state = await send({ type: 'relay.retry' }, popup);
   assert.equal(state.pending, 0);
   assert.equal(state.last.outcome, 'created');
-  assert.equal(state.last.readmeUrl, 'https://github.com/owner/solutions/blob/main/solutions/two-sum/README.md');
+  assert.equal(state.last.readmeUrl, 'https://github.com/owner/solutions/blob/main/solutions/1-two-sum/README.md');
   assert.equal(feedback.at(-1).tabId, 1);
   assert.equal(feedback.at(-1).status, 'created');
-  assert.equal(badges.at(-1), '✓');
+  assert.equal(badges.get(1), '✓');
+  assert.equal(badges.get(2), '');
   assert.equal(JSON.stringify(state).includes(token), false);
   assert.deepEqual(await send({ type: 'leetcode.accepted', submission }, leetcode), { ok: true, queued: false });
   assert.equal(commits, 1);
+  await send({ type: 'leetcode.context', slug: 'add-two-numbers' }, leetcode);
+  assert.equal(badges.get(1), '');
+  await send({ type: 'leetcode.context', slug: 'two-sum' }, leetcode);
+  assert.equal(badges.get(1), '✓');
+  chrome.tabs.onUpdated.listener(1, { status: 'loading' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(badges.get(1), '');
+  assert.equal((await send({ type: 'relay.setProblemText', enabled: false }, popup)).includeProblemText, false);
+  assert.equal((await send(connect, popup)).includeProblemText, false);
 });

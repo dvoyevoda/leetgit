@@ -7,7 +7,7 @@
   const PROBLEM_WAIT_MS = 350;
   const DETAILS_WAIT_MS = 600;
   const problemSlug = /^[a-z0-9][a-z0-9-]{0,149}$/;
-  const questionOperations = new Set(["questionData", "questionTitle", "questionContent",
+  const questionOperations = new Set(["questionData", "questionDetail", "questionTitle", "questionContent",
     "singleQuestionTopicTags", "questionTopicTags"]);
   const measurementFields = ["runtime", "memory", "runtimePercentile", "memoryPercentile"];
   const origin = window.location.origin;
@@ -66,7 +66,7 @@
     const query = input.query;
     if (typeof query === "string" && /^\s*(?:query\b|\{)/.test(query) &&
         /\bquestion\s*\(\s*titleSlug\s*:/.test(query) &&
-        /\b(?:title|questionFrontendId|difficulty|content|topicTags|isPaidOnly)\b/.test(query)) return slug;
+        /\b(?:title|questionFrontendId|frontendQuestionId|difficulty|content|topicTags|isPaidOnly)\b/.test(query)) return slug;
     return null;
   }
 
@@ -92,8 +92,8 @@
       if (!question || (question.titleSlug != null && question.titleSlug !== slug)) return;
       const problem = { ...problems.get(slug) };
       const title = text(question.title, 200);
-      const frontendId = text(Number.isSafeInteger(question.questionFrontendId)
-        ? String(question.questionFrontendId) : question.questionFrontendId, 32);
+      const displayedId = question.questionFrontendId ?? question.frontendQuestionId;
+      const frontendId = text(Number.isSafeInteger(displayedId) ? String(displayedId) : displayedId, 32);
       const difficulty = text(question.difficulty, 10);
       if (title) problem.title = title;
       if (frontendId) problem.frontendId = frontendId;

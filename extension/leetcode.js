@@ -19,12 +19,22 @@
     const path = window.location.pathname;
     if (path !== prefix && !path?.startsWith(`${prefix}/`)) return {};
 
-    const links = document.querySelectorAll(`a[href="${prefix}/"], a[href="${prefix}/description/"]`);
-    const displayTitle = Array.from(links, link => text(link.textContent, 240))
-      .map(value => /^([\p{L}\p{N}][\p{L}\p{N}. -]{0,31}?)\.\s+(.+)$/u.exec(value ?? ""))
-      .find(Boolean);
-    const pageTitle = document.querySelector('meta[property="og:title"]')?.content ?? document.title;
-    const title = displayTitle?.[2] ?? /^(.+)\s+[-–]\s+LeetCode$/i.exec(pageTitle ?? "")?.[1];
+    const links = document.querySelectorAll(`a[href^="${prefix}"], a[href^="${ORIGIN}${prefix}"]`);
+    const labels = [];
+    for (const link of links) {
+      const url = new URL(link.href, ORIGIN);
+      const target = url.pathname.replace(/\/$/, "");
+      if (url.origin === ORIGIN && (target === prefix || target === `${prefix}/description`)) {
+        labels.push(link.textContent);
+      }
+    }
+    const heading = document.querySelector('[data-cy="question-title"], [data-testid="question-title"], [data-e2e-locator="question-title"]')?.textContent;
+    const metadataTitle = document.querySelector('meta[property="og:title"]')?.content ?? document.title;
+    const pageTitle = /^(.+)\s+[-–]\s+LeetCode$/i.exec(metadataTitle ?? "")?.[1];
+    const displayTitle = [...labels, heading, pageTitle]
+      .map(value => /^([\p{L}\p{N}][\p{L}\p{N}. -]{0,31}?)\.\s+(.+)$/u.exec(text(value, 240) ?? ""))
+      .find(match => /\d/.test(match?.[1] ?? ""));
+    const title = displayTitle?.[2] ?? text(heading, 200) ?? pageTitle;
     const difficulty = document.querySelector('[data-difficulty], [class*="text-difficulty-"]')?.textContent;
     const problem = { title, frontendId: displayTitle?.[1], difficulty };
 

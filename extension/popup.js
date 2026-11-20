@@ -8,6 +8,7 @@ const connected = byId('connected');
 const notice = byId('notice');
 const repoInput = byId('repo-input');
 const tokenInput = byId('token-input');
+const createToken = byId('create-token');
 const retry = byId('retry');
 const reconnect = byId('reconnect');
 const settings = byId('settings');
@@ -24,6 +25,46 @@ let current;
 let operating = false;
 let reconnecting = false;
 let revision = 0;
+const pendingDraftWrites = new Set();
+
+function bindDraft(input, storage, key) {
+  let edited = false;
+
+  function save() {
+    edited = true;
+    const write = storage.set({ [key]: input.value });
+    pendingDraftWrites.add(write);
+    void write.catch(() => {}).then(() => pendingDraftWrites.delete(write));
+    return write;
+  }
+
+  input.addEventListener('input', save);
+  return {
+    save,
+    async restore() {
+      const { [key]: value } = await storage.get(key);
+      if (!edited && !current?.repository && typeof value === 'string') input.value = value;
+    },
+    clearField() {
+      edited = true;
+      input.value = '';
+    },
+  };
+}
+
+const repositoryDraft = bindDraft(repoInput, chrome.storage.local, 'repositoryDraft');
+const tokenDraft = bindDraft(tokenInput, chrome.storage.session, 'tokenDraft');
+
+function clearSetupFields() {
+  repositoryDraft.clearField();
+  tokenDraft.clearField();
+}
+
+function setFormBusy(busy) {
+  repoInput.readOnly = busy;
+  tokenInput.readOnly = busy;
+  createToken.disabled = busy;
+}
 
 function message(text, error = false) {
   notice.toggleAttribute('data-error', error);
@@ -145,7 +186,7 @@ function render(state) {
   reconnect.textContent = reconnecting ? 'Cancel reconnect' : 'Reconnect';
   byId('setup-title').textContent = reconnecting ? 'Reconnect repository' : 'Connect a repository';
   byId('setup-purpose').hidden = reconnecting;
-  includeProblemText.checked = state.includeProblemText === true;
+  includeProblemText.checked = state.includeProblemText !== false;
   message('');
   if (!repository) return;
 
@@ -176,22 +217,25 @@ async function run(button, operation, progress = 'Working…') {
   operating = true;
   revision += 1;
   button.disabled = true;
+  setFormBusy(true);
   if (progress) message(progress);
   let complete = false;
   try {
     render(await operation());
     complete = true;
   } catch (error) {
-    includeProblemText.checked = current?.includeProblemText === true;
+    includeProblemText.checked = current?.includeProblemText !== false;
     message(error.message, true);
   } finally {
     operating = false;
     button.disabled = false;
+    setFormBusy(false);
     if (complete) void refresh().catch(() => {});
   }
 }
 
-byId('create-token').addEventListener('click', () => {
+createToken.addEventListener('click', async () => {
+  if (operating) return;
   let name;
   try {
     name = normalizeRepositoryName(repoInput.value);
@@ -202,18 +246,28 @@ byId('create-token').addEventListener('click', () => {
   }
   const url = new URL('https://github.com/settings/personal-access-tokens/new');
   url.search = new URLSearchParams({ name: 'LeetGit', target_name: name.split('/')[0], expires_in: '90', contents: 'write' });
-  void chrome.storage.local.set({ repositoryDraft: name })
-    .then(() => chrome.tabs.create({ url: url.href }))
-    .catch(() => message('Could not open GitHub’s token form. Try again.', true));
+  operating = true;
+  setFormBusy(true);
+  try {
+    await Promise.allSettled(pendingDraftWrites);
+    await repositoryDraft.save();
+    await chrome.tabs.create({ url: url.href });
+  } catch {
+    message('Could not save the repository draft or open GitHub’s token form. Try again.', true);
+  } finally {
+    operating = false;
+    setFormBusy(false);
+  }
 });
 
 byId('token-form').addEventListener('submit', event => {
   event.preventDefault();
   void run(byId('connect-token'), async () => {
     const name = normalizeRepositoryName(repoInput.value);
+    await Promise.allSettled(pendingDraftWrites);
     const state = await command('relay.connectToken', { name, token: tokenInput.value });
     reconnecting = false;
-    tokenInput.value = '';
+    clearSetupFields();
     settings.open = false;
     return state;
   }, 'Checking your repository…');
@@ -228,16 +282,19 @@ if (workerOrigin) {
     if (origin.protocol !== 'https:' || origin.origin !== workerOrigin) throw new Error('The configured Worker must be an HTTPS origin.');
     const allowed = await chrome.permissions.request({ origins: [`${origin.origin}/*`] });
     if (!allowed) throw new Error('Chrome needs access to the configured Worker to connect.');
+    await Promise.allSettled(pendingDraftWrites);
     const state = await command('relay.connectApp');
     reconnecting = false;
+    clearSetupFields();
     settings.open = false;
     return state;
   }, 'Opening GitHub…'));
 }
 
 reconnect.addEventListener('click', () => {
-  if (!current?.repository) return;
+  if (operating || !current?.repository) return;
   reconnecting = !reconnecting;
+  clearSetupFields();
   repoInput.value = current.repository.fullName;
   render(current);
   if (reconnecting) repoInput.focus();
@@ -246,8 +303,10 @@ reconnect.addEventListener('click', () => {
 byId('disconnect').addEventListener('click', event => {
   if (current?.pending && !confirm('Disconnect and discard the solutions waiting to sync?')) return;
   void run(event.currentTarget, async () => {
+    await Promise.allSettled(pendingDraftWrites);
     const state = await command('relay.disconnect');
     reconnecting = false;
+    clearSetupFields();
     settings.open = false;
     return state;
   }, 'Disconnecting…');
@@ -255,7 +314,7 @@ byId('disconnect').addEventListener('click', event => {
 
 includeProblemText.addEventListener('change', () => {
   if (operating) {
-    includeProblemText.checked = current?.includeProblemText === true;
+    includeProblemText.checked = current?.includeProblemText !== false;
     return;
   }
   const enabled = includeProblemText.checked;
@@ -268,7 +327,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.relay && !operating) void refresh().catch(() => {});
 });
 
-void refresh().catch(error => message(error.message, true));
-void chrome.storage.local.get('repositoryDraft').then(({ repositoryDraft }) => {
-  if (repositoryDraft && !repoInput.value) repoInput.value = repositoryDraft;
-}).catch(() => {});
+void refresh().then(() => {
+  if (!current?.repository) void Promise.allSettled([repositoryDraft.restore(), tokenDraft.restore()]);
+}).catch(error => message(error.message, true));

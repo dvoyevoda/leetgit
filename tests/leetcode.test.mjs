@@ -48,7 +48,7 @@ function page(respond, { pathname, document = {}, describe } = {}) {
     document: { baseURI: `${origin}/`, querySelector: () => null, querySelectorAll: () => [], ...document } };
   runInNewContext(bridge, globals);
   runInNewContext(content, {
-    window, document: globals.document, TextEncoder, LeetGitProblem: describe ? { describe } : undefined,
+    window, document: globals.document, URL, TextEncoder, LeetGitProblem: describe ? { describe } : undefined,
     chrome: { runtime: { async sendMessage(message) { messages.push(structuredClone(message)); } } },
   });
   return { window, XMLHttpRequest, dispatchMessage, messages, bridgeMessages };
@@ -186,7 +186,7 @@ test("accepted source is enriched from related page-owned GraphQL and final judg
     if (url === "/graphql/") {
       const { operationName, variables } = JSON.parse(options.body);
       const question = {
-        questionTitle: { title: "Two Sum", titleSlug: variables.titleSlug, questionFrontendId: "1",
+        questionTitle: { title: "Two Sum", titleSlug: variables.titleSlug, frontendQuestionId: "1", questionId: "9001",
           difficulty: "easy", isPaidOnly: false },
         questionContent: { content: html },
         singleQuestionTopicTags: { topicTags: [{ name: "Array" }, { name: "Hash Table" }, { name: "Array" }] },
@@ -315,7 +315,10 @@ test("rendered fallback stays on the submitted problem and requires explicit non
   const { window, dispatchMessage, messages } = page(() => assert.fail("No metadata request expected"), {
     pathname: "/problems/two-sum/submissions/303/",
     document: {
-      querySelectorAll: () => [{ textContent: "1. Two Sum" }],
+      querySelectorAll: () => [
+        { href: `${origin}/problems/two-sum-extended/`, textContent: "111. Another Problem" },
+        { href: `${origin}/problems/two-sum/description?envType=study-plan-v2`, textContent: "1. Two Sum" },
+      ],
       querySelector(selector) {
         if (selector.includes("data-difficulty")) return { textContent: "Easy" };
         if (selector.includes("description_content")) {

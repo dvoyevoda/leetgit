@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { problemReadme, solutionFile } from '../extension/solution.js';
+import { problemFolder, problemReadme, solutionFile } from '../extension/solution.js';
 
 const sample = {
   id: '100', slug: 'fixture-problem', language: 'python3', acceptedAt: '2026-11-20T18:00:00Z',
@@ -12,7 +12,7 @@ const sample = {
 
 test('the README presents problem facts and accepted results alongside exact code', () => {
   const { path, content } = problemReadme(sample);
-  assert.equal(path, 'solutions/fixture-problem/README.md');
+  assert.equal(path, 'solutions/101-fixture-problem/README.md');
   assert.ok(content.includes('# 101. Fixture \\[Problem\\]'));
   assert.ok(content.includes('**Medium** · Arrays · Sorting'));
   assert.ok(content.includes('> A short description for this fixture.'));
@@ -21,6 +21,12 @@ test('the README presents problem facts and accepted results alongside exact cod
   assert.equal(solutionFile(sample).content, sample.code);
   assert.ok(!content.includes('Full fixture text.'));
   assert.equal(problemReadme(sample, content).content, content);
+});
+
+test('folder names normalize the LeetCode display number and fall back to a safe slug', () => {
+  assert.equal(problemFolder({ ...sample, problem: { frontendId: '000101' } }), '101-fixture-problem');
+  assert.equal(problemFolder({ ...sample, problem: { frontendId: 'LCP 01' } }), 'fixture-problem');
+  assert.equal(solutionFile(sample).path, 'solutions/101-fixture-problem/python3.py');
 });
 
 test('a distinct result updates the README, preserving other languages, custom notes, and replay order', () => {
@@ -37,7 +43,7 @@ test('a distinct result updates the README, preserving other languages, custom n
   assert.equal(problemReadme({ ...newer, id: '99' }, updated).superseded, true);
 });
 
-test('full problem text is opt-in and is excluded for premium problems', () => {
+test('the README honors the full-text setting and excludes premium problem descriptions', () => {
   const full = problemReadme({ ...sample, includeProblemText: true }).content;
   assert.ok(full.includes('Full fixture text.\n\n- Example'));
   const disabled = problemReadme({ ...sample, id: '103', includeProblemText: false }, full).content;

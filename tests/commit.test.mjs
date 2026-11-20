@@ -26,14 +26,14 @@ function gitObject(contents) {
   return createHash('sha1').update(`blob ${buffer.length}\0`).update(buffer).digest('hex');
 }
 
-function snapshot({ currentHead = head, rootTree = root, readme, code, codeMode = '100644' }) {
+function snapshot({ currentHead = head, rootTree = root, readme, code, codeMode = '100644', folder = 'two-sum' }) {
   const source = { path: 'python3.py', sha: gitObject(code), type: 'blob', mode: codeMode };
   const readmeObject = { path: 'README.md', sha: existingReadme, type: 'blob', mode: '100644' };
   return {
     '/ref/heads/main': { ref: 'refs/heads/main', object: { type: 'commit', sha: currentHead } },
     [`/commits/${currentHead}`]: { tree: { sha: rootTree } },
     [`/trees/${rootTree}`]: { tree: [{ path: 'solutions', mode: '040000', type: 'tree', sha: solutionsTree }] },
-    [`/trees/${solutionsTree}`]: { tree: [{ path: 'two-sum', mode: '040000', type: 'tree', sha: problemTree }] },
+    [`/trees/${solutionsTree}`]: { tree: [{ path: folder, mode: '040000', type: 'tree', sha: problemTree }] },
     [`/trees/${problemTree}`]: { tree: [source, readmeObject] },
     [`/blobs/${existingReadme}`]: { content: Buffer.from(readme).toString('base64'), encoding: 'base64' },
   };
@@ -66,6 +66,122 @@ test('an older offline submission does not replace a newer solution', async () =
   const request = readOnly(snapshot({ readme, code: latest.code }));
   const result = await commitSubmission({ request, repository, submission });
   assert.equal(result.outcome, 'unchanged');
+});
+
+test('a numbered folder remains authoritative when problem metadata is unavailable', async () => {
+  const numbered = { ...submission, problem: { frontendId: '1' } };
+  const { content: readme } = problemReadme(numbered);
+  const request = readOnly(snapshot({ readme, code: submission.code, folder: '1-two-sum' }));
+
+  const result = await commitSubmission({ request, repository, submission });
+  assert.equal(result.outcome, 'unchanged');
+  assert.equal(result.path, 'solutions/1-two-sum/python3.py');
+  assert.equal(result.readmeUrl, 'https://github.com/owner/repo/blob/main/solutions/1-two-sum/README.md');
+});
+
+test('a numbered sync moves the untouched parts of a legacy folder in the same commit', async () => {
+  const numbered = { ...submission, id: '102', problem: { frontendId: '0001' } };
+  const { content: oldReadme } = problemReadme(submission, 'My approach notes\n');
+  const responses = snapshot({ readme: oldReadme, code: submission.code });
+  const otherProblem = { path: 'unrelated', mode: '040000', type: 'tree', sha: 'f'.repeat(40) };
+  responses[`/trees/${solutionsTree}`].tree.push(otherProblem);
+  responses[`/trees/${problemTree}`].tree.push({
+    path: 'notes.txt', mode: '100644', type: 'blob', sha: '0'.repeat(40),
+  });
+  const newFolderSha = '1'.repeat(40);
+  const newSolutionsSha = '2'.repeat(40);
+  const newRootSha = '3'.repeat(40);
+  const newCommitSha = '4'.repeat(40);
+  const treeWrites = [];
+  const newBlobs = [];
+  let updatedRef = 0;
+
+  function request(path, options) {
+    const resource = path.replace(/^\/repos\/owner\/repo\/git/, '');
+    if (!options) return readOnly(responses)(path, options);
+    if (resource === '/blobs') {
+      const content = Buffer.from(options.body.content, 'base64').toString();
+      newBlobs.push(content);
+      return objectResponse({ sha: gitObject(content) }, 201);
+    }
+    if (resource === '/trees') {
+      const sha = [newFolderSha, newSolutionsSha, newRootSha][treeWrites.length];
+      treeWrites.push(options.body);
+      return objectResponse({ sha }, 201);
+    }
+    if (resource === '/commits') {
+      assert.deepEqual(options.body.parents, [head]);
+      assert.equal(options.body.tree, newRootSha);
+      return objectResponse({ sha: newCommitSha }, 201);
+    }
+    assert.equal(resource, '/refs/heads/main');
+    assert.deepEqual(options.body, { sha: newCommitSha, force: false });
+    updatedRef += 1;
+    return objectResponse({});
+  }
+
+  const result = await commitSubmission({ request, repository, submission: numbered });
+  assert.equal(result.outcome, 'updated');
+  assert.equal(result.path, 'solutions/1-two-sum/python3.py');
+  assert.equal(updatedRef, 1);
+  assert.equal(newBlobs.length, 1);
+  assert.match(newBlobs[0], /My approach notes/);
+  assert.deepEqual(treeWrites, [
+    { base_tree: problemTree, tree: [{ path: 'README.md', mode: '100644', type: 'blob', sha: gitObject(newBlobs[0]) }] },
+    { tree: [{ path: '1-two-sum', mode: '040000', type: 'tree', sha: newFolderSha }, otherProblem] },
+    { base_tree: root, tree: [{ path: 'solutions', mode: '040000', type: 'tree', sha: newSolutionsSha }] },
+  ]);
+});
+
+test('a numbered path claimed by another problem leaves the legacy folder in place', async () => {
+  const numbered = { ...submission, problem: { frontendId: '1' } };
+  const { content: readme } = problemReadme(numbered, null, 'two-sum');
+  const { content: foreignReadme } = problemReadme({ ...submission, slug: '1-two-sum' });
+  const responses = snapshot({ readme, code: submission.code });
+  const foreignTree = 'f'.repeat(40);
+  const foreignBlob = '0'.repeat(40);
+  responses[`/trees/${solutionsTree}`].tree.push({
+    path: '1-two-sum', mode: '040000', type: 'tree', sha: foreignTree,
+  });
+  responses[`/trees/${foreignTree}`] = { tree: [{ path: 'README.md', mode: '100644', type: 'blob', sha: foreignBlob }] };
+  responses[`/blobs/${foreignBlob}`] = { content: Buffer.from(foreignReadme).toString('base64'), encoding: 'base64' };
+
+  const result = await commitSubmission({ request: readOnly(responses), repository, submission: numbered });
+  assert.equal(result.outcome, 'unchanged');
+  assert.equal(result.path, 'solutions/two-sum/python3.py');
+});
+
+test('an older numbered submission can move the existing directory without replacing its files', async () => {
+  const latest = { ...submission, id: '102', code: 'return b + a\n' };
+  const { content: readme } = problemReadme(latest);
+  const responses = snapshot({ readme, code: latest.code });
+  const newSolutionsSha = 'f'.repeat(40);
+  const newRootSha = '0'.repeat(40);
+  const newCommitSha = '1'.repeat(40);
+  const writes = [];
+  function request(path, options) {
+    const resource = path.replace(/^\/repos\/owner\/repo\/git/, '');
+    if (!options) return readOnly(responses)(path, options);
+    writes.push(resource);
+    if (resource === '/trees' && !options.body.base_tree) {
+      assert.deepEqual(options.body.tree, [
+        { path: '1-two-sum', mode: '040000', type: 'tree', sha: problemTree },
+      ]);
+      return objectResponse({ sha: newSolutionsSha }, 201);
+    }
+    if (resource === '/trees') {
+      return objectResponse({ sha: newRootSha }, 201);
+    }
+    if (resource === '/commits') return objectResponse({ sha: newCommitSha }, 201);
+    assert.equal(resource, '/refs/heads/main');
+    return objectResponse({});
+  }
+
+  const numbered = { ...submission, problem: { frontendId: '1' } };
+  const result = await commitSubmission({ request, repository, submission: numbered });
+  assert.equal(result.outcome, 'updated');
+  assert.equal(result.path, 'solutions/1-two-sum/python3.py');
+  assert.deepEqual(writes, ['/trees', '/trees', '/commits', '/refs/heads/main']);
 });
 
 test('a destination symlink is left untouched', async () => {

@@ -19,19 +19,21 @@ Create or choose a GitHub repository for your solutions. Initialize a new reposi
 2. Choose the repository’s owner under **Resource owner**. Under **Repository access**, select **Only select repositories** and choose exactly one repository. Check the permission list before generating the token. GitHub adds read-only **Metadata** automatically. [GitHub’s token guide](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)
 3. Copy the token beginning with `github_pat_`, paste it into LeetGit, and click **Connect repository**. Repeat the setup with a new token when it expires.
 
+The popup remembers the repository field when you close it. An unfinished token stays in Chrome’s extension memory until you finish setup or close Chrome.
+
 For a button-based setup without copying a token, a maintainer can deploy the optional [GitHub App companion](worker/DEPLOY.md). During GitHub installation, choose **Only select repositories** and select exactly one repository.
 
 ## What gets saved
 
-Each accepted submission updates a problem folder and its README in one Git commit. For `two-sum`, that’s `solutions/two-sum/README.md` alongside a source file such as `python3.py`. The README includes the problem link, available difficulty and topics, a source preview, and the latest accepted results per language. Runtime, memory, percentiles, and test counts appear when LeetCode supplies them. Add your own notes outside the generated section to keep them across updates.
+Each accepted submission updates a problem folder and its README in one Git commit. With the LeetCode problem number, Two Sum is saved in `solutions/1-two-sum/` alongside a source file such as `python3.py`. A previously saved slug-only folder moves to the numbered name on its next sync when the number is available and the destination is free. The README includes the problem link, available difficulty and topics, a source preview, and the latest accepted results per language. Runtime, memory, percentiles, and test counts appear when LeetCode supplies them. Add your own notes outside the generated section to keep them across updates.
 
-The README links to the official prompt and can include a short overview when LeetCode supplies visible problem text. To include the full visible text of a non-premium problem, enable **Settings → Include full problem text** for a repository where you have permission to share it. [LeetCode Terms of Service](https://leetcode.com/terms/)
+The README includes the full visible text of non-premium problems by default when LeetCode supplies it. In **Settings**, turn off **Include full problem text** to use the short overview and official link. Use the full text option where you have permission to share the description. [LeetCode Terms of Service](https://leetcode.com/terms/)
 
 ## Verify with a previous solution
 
 1. In your signed-in Chrome window, open a previously solved problem on `leetcode.com`.
 2. In its **Submissions** tab, open an **Accepted** submission. Put that exact solution in the editor and choose the same language.
-3. Click **Submit** and wait for the **Saved to GitHub** or **Updated on GitHub** message. The Chrome toolbar icon also shows a check mark after a successful sync.
+3. Click **Submit** and wait for the **Saved to GitHub** or **Updated on GitHub** message. The Chrome toolbar shows a green check on that problem after a successful sync. Navigate to an unsynced problem and it clears.
 4. Open the problem README from the popup or the on-page message. Check the results and confirm the source file matches what you submitted. A fresh resubmission can update the results even when its code is identical. Resubmit earlier solves to add READMEs for them.
 
 Open the LeetGit popup to check sync status. If a sync fails, correct the reported issue and click **Retry now**.

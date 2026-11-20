@@ -2,6 +2,7 @@ import { appRequest, connectApp } from './app.js';
 import { workerOrigin } from './config.js';
 import { connectToken, expectJson, SyncError, syncToken } from './github.js';
 import { normalizeSubmission, submissionTitle } from './solution.js';
+import { currentProblemInTab, refreshProblemBadges, updateProblemContext } from './problem-badges.js';
 
 // Keep the installed retry alarm when upgrading from v0.1.0.
 const alarmName = 'leetrelay-sync';
@@ -24,20 +25,24 @@ async function readState() {
 
 async function saveState(state) {
   await chrome.storage.local.set({ relay: state });
-  await updateBadge(state);
+  await refreshProblemBadges(state).catch(() => {});
 }
 
-async function updateBadge(state) {
-  const badge = state.error ? ['!', '#b83e2f'] : state.pending.length ? [String(state.pending.length), '#a05a00'] :
-    state.last ? ['✓', '#13804a'] : ['', '#a05a00'];
-  await Promise.all([
-    chrome.action.setBadgeText({ text: badge[0] }),
-    chrome.action.setBadgeBackgroundColor({ color: badge[1] }),
-  ]).catch(() => {});
+function problemTextEnabled(state) {
+  // v0.2.0 stored false on every first connection. Only decisions made under the new default count as overrides.
+  return state.problemTextPreference !== false;
 }
 
-function publicState({ connection, pending, last, error, includeProblemText }) {
-  return { repository: connection?.repository ?? null, pending: pending.length, last, error, includeProblemText: includeProblemText === true };
+function publicState(state) {
+  const { connection, pending, last, error } = state;
+  return { repository: connection?.repository ?? null, pending: pending.length, last, error, includeProblemText: problemTextEnabled(state) };
+}
+
+async function clearSetupDrafts() {
+  await Promise.allSettled([
+    chrome.storage.local.remove('repositoryDraft'),
+    chrome.storage.session.remove('tokenDraft'),
+  ]);
 }
 
 async function ensureAlarm() {
@@ -60,19 +65,22 @@ async function setConnection(connection) {
   state.connection = connection;
   if (!sameRepo) {
     state.recent = [];
+    state.syncedProblems = [];
     state.last = null;
-    state.includeProblemText = false;
+    delete state.problemTextPreference;
   }
   state.error = null;
   await saveState(state);
+  await clearSetupDrafts();
   await ensureAlarm();
   return publicState(state);
 }
 
-function notifyTab(tabId, status, details) {
-  if (Number.isInteger(tabId)) {
-    void chrome.tabs.sendMessage(tabId, { type: 'relay.feedback', status, ...details }, { frameId: 0 }).catch(() => {});
-  }
+function notifyTab(tabId, slug, status, details) {
+  if (!Number.isInteger(tabId)) return;
+  void currentProblemInTab(tabId).then(current => {
+    if (current === slug) return chrome.tabs.sendMessage(tabId, { type: 'relay.feedback', status, ...details }, { frameId: 0 });
+  }).catch(() => {});
 }
 
 async function enqueue(input, tabId) {
@@ -84,15 +92,15 @@ async function enqueue(input, tabId) {
   }
   if (state.pending.length >= maxPending) {
     const message = 'LeetGit’s queue is full. Retry the pending syncs, then resubmit.';
-    notifyTab(tabId, 'blocked', { message });
+    notifyTab(tabId, submission.slug, 'blocked', { message });
     throw new SyncError(message);
   }
   await ensureAlarm();
-  submission.includeProblemText = state.includeProblemText === true;
+  submission.includeProblemText = problemTextEnabled(state);
   if (!submission.includeProblemText && submission.problem) delete submission.problem.descriptionMarkdown;
   state.pending.push({ submission, tabId, attempts: 0 });
   await saveState(state);
-  notifyTab(tabId, 'queued', { title: submissionTitle(submission) });
+  notifyTab(tabId, submission.slug, 'queued', { title: submissionTitle(submission) });
   return { queued: true };
 }
 
@@ -106,7 +114,7 @@ async function flush(force = false) {
   const item = state.pending[0];
   const submission = {
     ...item.submission,
-    includeProblemText: state.includeProblemText === true && item.submission.includeProblemText !== false,
+    includeProblemText: problemTextEnabled(state) && item.submission.includeProblemText !== false,
   };
   if (!submission.includeProblemText && submission.problem) delete submission.problem.descriptionMarkdown;
   const title = submissionTitle(submission);
@@ -124,6 +132,8 @@ async function flush(force = false) {
     state.pending.shift();
     state.recent.push(item.submission.id);
     state.recent = state.recent.slice(-maxRecent);
+    const previousProblems = state.syncedProblems ?? (state.last?.slug ? [state.last.slug] : []);
+    state.syncedProblems = previousProblems.includes(submission.slug) ? previousProblems : [...previousProblems, submission.slug];
     state.last = {
       ...result, id: submission.id, slug: submission.slug, title,
       difficulty: submission.problem?.difficulty, language: submission.language,
@@ -144,7 +154,7 @@ async function flush(force = false) {
     }
   }
   await saveState(state);
-  if (feedback) notifyTab(item.tabId, feedback.status, feedback);
+  if (feedback) notifyTab(item.tabId, submission.slug, feedback.status, feedback);
   if (!state.error && state.pending.length) scheduleFlush();
   return publicState(state);
 }
@@ -158,15 +168,16 @@ async function disconnect() {
   if (state.connection?.mode === 'app' && state.connection.origin === workerOrigin) {
     await appRequest('/session', state.connection.token, 'DELETE').catch(() => {});
   }
-  const cleared = { connection: null, pending: [], recent: [], last: null, error: null, includeProblemText: false };
+  const cleared = { connection: null, pending: [], recent: [], syncedProblems: [], last: null, error: null };
   await saveState(cleared);
+  await clearSetupDrafts();
   return publicState(cleared);
 }
 
 async function setProblemText(enabled) {
   const state = await readState();
-  state.includeProblemText = enabled === true;
-  if (!state.includeProblemText) {
+  state.problemTextPreference = enabled === true;
+  if (!state.problemTextPreference) {
     for (const { submission } of state.pending) {
       submission.includeProblemText = false;
       if (submission.problem) delete submission.problem.descriptionMarkdown;
@@ -178,10 +189,15 @@ async function setProblemText(enabled) {
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   const fromLeetcode = sender.frameId === 0 && sender.origin === 'https://leetcode.com' &&
-    sender.url?.startsWith('https://leetcode.com/') && sender.tab;
+    sender.url?.startsWith('https://leetcode.com/') && Number.isInteger(sender.tab?.id) &&
+    (!sender.documentLifecycle || sender.documentLifecycle === 'active');
   const fromPopup = sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL('popup.html');
   let operation;
-  if (message?.type === 'leetcode.accepted' && fromLeetcode) {
+  if (message?.type === 'leetcode.context' && fromLeetcode) {
+    const slug = message.slug;
+    if (slug !== null && (typeof slug !== 'string' || !/^[a-z0-9][a-z0-9-]{0,149}$/.test(slug))) return;
+    operation = updateProblemContext(sender.tab.id, slug, readState);
+  } else if (message?.type === 'leetcode.accepted' && fromLeetcode) {
     operation = serial(() => enqueue(message.submission, sender.tab.id)).then(result => {
       if (result.queued) scheduleFlush();
       return result;
@@ -216,8 +232,19 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
 chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === alarmName) scheduleFlush(); });
 function restoreStatus() {
   void ensureAlarm().catch(() => {});
-  void readState().then(updateBadge).catch(() => {});
+  void chrome.action.setBadgeText({ text: '' }).catch(() => {});
+  void readState().then(refreshProblemBadges).catch(() => {});
 }
 
 chrome.runtime.onInstalled.addListener(restoreStatus);
 chrome.runtime.onStartup.addListener(restoreStatus);
+
+function forgetTab(tabId) {
+  void updateProblemContext(tabId, null, readState).catch(() => {});
+}
+
+chrome.tabs.onUpdated.addListener((tabId, change) => {
+  if (change.status === 'loading') forgetTab(tabId);
+});
+chrome.tabs.onRemoved.addListener(forgetTab);
+chrome.tabs.onReplaced.addListener((_added, removed) => forgetTab(removed));

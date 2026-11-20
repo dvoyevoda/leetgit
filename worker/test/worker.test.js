@@ -218,11 +218,12 @@ test('Worker uses metadata only to check the pinned repository and rejects a vis
 });
 
 test('Worker scopes the atomic solution and README writes to the repository ID', async (t) => {
-  const sourcePath = 'solutions/two-sum/python3.py';
-  const readmePath = 'solutions/two-sum/README.md';
+  const sourcePath = 'solutions/1-two-sum/python3.py';
+  const readmePath = 'solutions/1-two-sum/README.md';
   const submission = {
     id: '120', slug: 'two-sum', language: 'python3', code: '# λ\nprint(1)\n',
     acceptedAt: '2026-11-20T12:00:00.000Z',
+    problem: { frontendId: '1' },
   };
   const head = 'a'.repeat(40);
   const root = 'b'.repeat(40);

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LeetGit",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Sync accepted LeetCode solutions to one GitHub repository you choose.",
   "minimum_chrome_version": "120",
   "permissions": ["storage", "alarms", "identity"],
@@ -12,12 +12,12 @@
   "action": {
     "default_popup": "popup.html",
     "default_title": "LeetGit",
-    "default_icon": { "16": "icons/16.png", "32": "icons/32.png" }
+    "default_icon": { "16": "icons/16.png", "24": "icons/24.png", "32": "icons/32.png" }
   },
   "content_scripts": [
     {
       "matches": ["https://leetcode.com/*"],
-      "js": ["problem-description.js", "leetcode.js", "leetcode-feedback.js"],
+      "js": ["problem-context.js", "problem-description.js", "leetcode.js", "leetcode-feedback.js"],
       "run_at": "document_start"
     },
     {
