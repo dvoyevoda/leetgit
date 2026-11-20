@@ -1,7 +1,7 @@
 import { appRequest, connectApp } from './app.js';
 import { workerOrigin } from './config.js';
 import { connectToken, expectJson, SyncError, syncToken } from './github.js';
-import { normalizeSubmission } from './solution.js';
+import { normalizeSubmission, submissionTitle } from './solution.js';
 
 // Keep the installed retry alarm when upgrading from v0.1.0.
 const alarmName = 'leetrelay-sync';
@@ -24,11 +24,20 @@ async function readState() {
 
 async function saveState(state) {
   await chrome.storage.local.set({ relay: state });
-  await chrome.action.setBadgeText({ text: state.error ? '!' : state.pending.length ? String(state.pending.length) : '' });
+  await updateBadge(state);
 }
 
-function publicState({ connection, pending, last, error }) {
-  return { repository: connection?.repository ?? null, pending: pending.length, last, error };
+async function updateBadge(state) {
+  const badge = state.error ? ['!', '#b83e2f'] : state.pending.length ? [String(state.pending.length), '#a05a00'] :
+    state.last ? ['✓', '#13804a'] : ['', '#a05a00'];
+  await Promise.all([
+    chrome.action.setBadgeText({ text: badge[0] }),
+    chrome.action.setBadgeBackgroundColor({ color: badge[1] }),
+  ]).catch(() => {});
+}
+
+function publicState({ connection, pending, last, error, includeProblemText }) {
+  return { repository: connection?.repository ?? null, pending: pending.length, last, error, includeProblemText: includeProblemText === true };
 }
 
 async function ensureAlarm() {
@@ -52,6 +61,7 @@ async function setConnection(connection) {
   if (!sameRepo) {
     state.recent = [];
     state.last = null;
+    state.includeProblemText = false;
   }
   state.error = null;
   await saveState(state);
@@ -59,7 +69,13 @@ async function setConnection(connection) {
   return publicState(state);
 }
 
-async function enqueue(input) {
+function notifyTab(tabId, status, details) {
+  if (Number.isInteger(tabId)) {
+    void chrome.tabs.sendMessage(tabId, { type: 'relay.feedback', status, ...details }, { frameId: 0 }).catch(() => {});
+  }
+}
+
+async function enqueue(input, tabId) {
   const state = await readState();
   if (!state.connection) return { queued: false };
   const submission = normalizeSubmission(input);
@@ -67,11 +83,16 @@ async function enqueue(input) {
     return { queued: false };
   }
   if (state.pending.length >= maxPending) {
-    throw new SyncError('LeetGit’s queue is full. Retry your pending syncs, then resubmit this solution.');
+    const message = 'LeetGit’s queue is full. Retry the pending syncs, then resubmit.';
+    notifyTab(tabId, 'blocked', { message });
+    throw new SyncError(message);
   }
   await ensureAlarm();
-  state.pending.push({ submission, attempts: 0 });
+  submission.includeProblemText = state.includeProblemText === true;
+  if (!submission.includeProblemText && submission.problem) delete submission.problem.descriptionMarkdown;
+  state.pending.push({ submission, tabId, attempts: 0 });
   await saveState(state);
+  notifyTab(tabId, 'queued', { title: submissionTitle(submission) });
   return { queued: true };
 }
 
@@ -83,21 +104,33 @@ async function flush(force = false) {
   }
   const connection = state.connection;
   const item = state.pending[0];
+  const submission = {
+    ...item.submission,
+    includeProblemText: state.includeProblemText === true && item.submission.includeProblemText !== false,
+  };
+  if (!submission.includeProblemText && submission.problem) delete submission.problem.descriptionMarkdown;
+  const title = submissionTitle(submission);
+  let feedback;
   try {
     let result;
     if (connection.mode === 'app') {
       if (!workerOrigin || connection.origin !== workerOrigin) {
         throw new SyncError('The GitHub App server changed. Reconnect to continue.');
       }
-      result = await expectJson(await appRequest('/sync', connection.token, 'POST', item.submission), 'GitHub App');
+      result = await expectJson(await appRequest('/sync', connection.token, 'POST', submission), 'GitHub App');
     } else {
-      result = await syncToken(connection, item.submission);
+      result = await syncToken(connection, submission);
     }
     state.pending.shift();
     state.recent.push(item.submission.id);
     state.recent = state.recent.slice(-maxRecent);
-    state.last = { ...result, id: item.submission.id, slug: item.submission.slug };
+    state.last = {
+      ...result, id: submission.id, slug: submission.slug, title,
+      difficulty: submission.problem?.difficulty, language: submission.language,
+      acceptedAt: submission.acceptedAt, stats: submission.stats,
+    };
     state.error = null;
+    feedback = { status: result.outcome, title, url: result.readmeUrl ?? result.url };
   } catch (error) {
     item.attempts += 1;
     const retry = error instanceof SyncError ? error.retry : true;
@@ -106,8 +139,12 @@ async function flush(force = false) {
       message: error instanceof SyncError ? error.message : 'Sync was interrupted. LeetGit will retry.',
       nextAt: retry ? Date.now() + Math.max(delay, error.retryAfter || 0) : null,
     };
+    if (item.attempts === 1 || force) {
+      feedback = { status: retry ? 'delayed' : 'blocked', title, message: state.error.message };
+    }
   }
   await saveState(state);
+  if (feedback) notifyTab(item.tabId, feedback.status, feedback);
   if (!state.error && state.pending.length) scheduleFlush();
   return publicState(state);
 }
@@ -121,9 +158,22 @@ async function disconnect() {
   if (state.connection?.mode === 'app' && state.connection.origin === workerOrigin) {
     await appRequest('/session', state.connection.token, 'DELETE').catch(() => {});
   }
-  const cleared = { connection: null, pending: [], recent: [], last: null, error: null };
+  const cleared = { connection: null, pending: [], recent: [], last: null, error: null, includeProblemText: false };
   await saveState(cleared);
   return publicState(cleared);
+}
+
+async function setProblemText(enabled) {
+  const state = await readState();
+  state.includeProblemText = enabled === true;
+  if (!state.includeProblemText) {
+    for (const { submission } of state.pending) {
+      submission.includeProblemText = false;
+      if (submission.problem) delete submission.problem.descriptionMarkdown;
+    }
+  }
+  await saveState(state);
+  return publicState(state);
 }
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
@@ -132,7 +182,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   const fromPopup = sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL('popup.html');
   let operation;
   if (message?.type === 'leetcode.accepted' && fromLeetcode) {
-    operation = serial(() => enqueue(message.submission)).then(result => {
+    operation = serial(() => enqueue(message.submission, sender.tab.id)).then(result => {
       if (result.queued) scheduleFlush();
       return result;
     });
@@ -146,6 +196,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         operation = connectApp().then(connection => serial(() => setConnection(connection)));
         break;
       case 'relay.disconnect': operation = serial(disconnect); break;
+      case 'relay.setProblemText': operation = serial(() => setProblemText(message.enabled)); break;
       case 'relay.retry': operation = serial(() => flush(true)); break;
       default: return;
     }
@@ -163,5 +214,10 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
 });
 
 chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === alarmName) scheduleFlush(); });
-chrome.runtime.onInstalled.addListener(() => { void ensureAlarm(); });
-chrome.runtime.onStartup.addListener(() => { void ensureAlarm(); });
+function restoreStatus() {
+  void ensureAlarm().catch(() => {});
+  void readState().then(updateBadge).catch(() => {});
+}
+
+chrome.runtime.onInstalled.addListener(restoreStatus);
+chrome.runtime.onStartup.addListener(restoreStatus);

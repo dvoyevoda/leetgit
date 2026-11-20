@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { setImmediate } from "node:timers/promises";
+import { setImmediate, setTimeout as delay } from "node:timers/promises";
 import { runInNewContext } from "node:vm";
 import test from "node:test";
 
@@ -9,17 +9,19 @@ const submitUrl = "/problems/two-sum/submit/";
 const bridge = await readFile(new URL("../extension/page-bridge.js", import.meta.url), "utf8");
 const content = await readFile(new URL("../extension/leetcode.js", import.meta.url), "utf8");
 
-function page(respond) {
+function page(respond, { pathname, document = {}, describe } = {}) {
   const messages = [];
+  const bridgeMessages = [];
   const listeners = [];
   const window = {
-    location: { origin },
+    location: { origin, pathname },
     fetch: respond,
     addEventListener(type, listener) {
       if (type === "message") listeners.push(listener);
     },
     postMessage(data, targetOrigin) {
       assert.equal(targetOrigin, origin);
+      bridgeMessages.push(structuredClone(data));
       dispatchMessage(data);
     },
   };
@@ -42,17 +44,22 @@ function page(respond) {
     }
   }
 
-  const globals = { window, XMLHttpRequest, URL, Blob, Request, document: { baseURI: `${origin}/` } };
+  const globals = { window, XMLHttpRequest, URL, Blob, Request, TextEncoder, setTimeout, clearTimeout,
+    document: { baseURI: `${origin}/`, querySelector: () => null, querySelectorAll: () => [], ...document } };
   runInNewContext(bridge, globals);
   runInNewContext(content, {
-    window,
+    window, document: globals.document, TextEncoder, LeetGitProblem: describe ? { describe } : undefined,
     chrome: { runtime: { async sendMessage(message) { messages.push(structuredClone(message)); } } },
   });
-  return { window, XMLHttpRequest, dispatchMessage, messages };
+  return { window, XMLHttpRequest, dispatchMessage, messages, bridgeMessages };
 }
 
 function submitOptions(typed_code, lang = "python3") {
   return { method: "POST", body: JSON.stringify({ lang, typed_code }) };
+}
+
+function graphqlOptions(operationName, titleSlug = "two-sum", query) {
+  return { method: "POST", body: JSON.stringify({ operationName, variables: { titleSlug }, query }) };
 }
 
 test("versioned fetch polls sync the exact submitted source once after Accepted", async () => {
@@ -167,4 +174,192 @@ test("the isolated script ignores frames, foreign origins, and unsafe submission
   assert.equal(messages.length, 1);
   assert.equal(messages[0].submission.url, `${origin}/problems/two-sum/submissions/981/`);
   assert.equal(messages[0].submission.acceptedAt, "2026-11-20T15:00:00.000Z");
+});
+
+test("accepted source is enriched from related page-owned GraphQL and final judge results", async () => {
+  const code = "# source stays exact  \n";
+  const html = "<p>A synthetic problem statement.</p>";
+  const calls = [];
+  const descriptions = [];
+  const { window, messages } = page(async (url, options) => {
+    calls.push(url);
+    if (url === "/graphql/") {
+      const { operationName, variables } = JSON.parse(options.body);
+      const question = {
+        questionTitle: { title: "Two Sum", titleSlug: variables.titleSlug, questionFrontendId: "1",
+          difficulty: "easy", isPaidOnly: false },
+        questionContent: { content: html },
+        singleQuestionTopicTags: { topicTags: [{ name: "Array" }, { name: "Hash Table" }, { name: "Array" }] },
+      }[operationName];
+      return Response.json({ data: { question } });
+    }
+    if (url === submitUrl) return Response.json({ submission_id: 301 });
+    assert.equal(url, "/submissions/detail/301/v2/check/");
+    return Response.json({ state: "SUCCESS", status_code: 10, status_runtime: "2 ms", status_memory: "15.4 MB",
+      runtime_percentile: "98.18%", memory_percentile: 0, total_correct: "63", total_testcases: 63 });
+  }, { describe: input => {
+    descriptions.push(input);
+    return { overview: "A synthetic problem statement.", descriptionMarkdown: "A synthetic problem statement.\n" };
+  } });
+
+  for (const operation of ["questionContent", "singleQuestionTopicTags", "questionTitle"]) {
+    const response = await window.fetch("/graphql/", graphqlOptions(operation));
+    assert.ok((await response.json()).data.question);
+    await setImmediate();
+  }
+  await window.fetch(submitUrl, submitOptions(code));
+  await window.fetch("/submissions/detail/301/v2/check/");
+  await setImmediate();
+  assert.deepEqual(calls, ["/graphql/", "/graphql/", "/graphql/", submitUrl, "/submissions/detail/301/v2/check/"]);
+  assert.deepEqual(descriptions, [html]);
+  const { submission } = messages[0];
+  assert.equal(submission.code, code);
+  assert.deepEqual(submission.problem, {
+    title: "Two Sum", frontendId: "1", difficulty: "Easy", paidOnly: false,
+    topics: ["Array", "Hash Table"], overview: "A synthetic problem statement.",
+    descriptionMarkdown: "A synthetic problem statement.\n", url: `${origin}/problems/two-sum/`,
+  });
+  assert.deepEqual(submission.stats, {
+    runtime: "2 ms", memory: "15.4 MB", runtimePercentile: 98.18, memoryPercentile: 0, testsPassed: 63, totalTests: 63,
+  });
+});
+
+test("non-problem operations and premium descriptions stay outside the submission", async () => {
+  let unrelatedClones = 0;
+  const { window, messages, bridgeMessages } = page(async (url, options) => {
+    if (url === "/graphql/") {
+      const { operationName } = JSON.parse(options.body);
+      if (operationName === "accountData") {
+        return { ok: true, clone() { unrelatedClones += 1; return Response.json({}); } };
+      }
+      if (operationName === "questionContent") {
+        return Response.json({ data: { question: { content: "<p>Payment required</p>" } } });
+      }
+      return Response.json({ data: { question: { title: "A paid problem", titleSlug: "two-sum",
+        questionFrontendId: 991, difficulty: "Hard", isPaidOnly: true } } });
+    }
+    if (url === submitUrl) return Response.json({ submission_id: 302 });
+    return Response.json({ state: "SUCCESS", status_code: 10, runtimePercentile: -1, memoryPercentile: 102,
+      runtimeDisplay: "<img>", memoryDisplay: "20 KB", totalCorrect: 15, totalTestcases: 2 });
+  }, { describe: () => assert.fail("A premium problem must not be converted") });
+
+  await window.fetch("/graphql/", graphqlOptions("accountData", "two-sum", "query accountData { account { username } }"));
+  await window.fetch("/graphql/", graphqlOptions("questionContent"));
+  await setImmediate();
+  await window.fetch("/graphql/", graphqlOptions("questionData"));
+  await window.fetch(submitUrl, submitOptions("accepted\n"));
+  await window.fetch("/submissions/detail/302/v2/check/");
+  await setImmediate();
+  assert.equal(unrelatedClones, 0);
+  assert.equal(bridgeMessages[0].submission.problem.descriptionHtml, undefined);
+  assert.deepEqual(messages[0].submission.problem, {
+    title: "A paid problem", frontendId: "991", difficulty: "Hard", paidOnly: true, url: `${origin}/problems/two-sum/`,
+  });
+  assert.deepEqual(messages[0].submission.stats, { memory: "20 KB", totalTests: 2 });
+});
+
+test("unclassified problem text never leaves the page bridge", async () => {
+  const { window, messages, bridgeMessages } = page(async url => {
+    if (url === "/graphql/") return Response.json({ data: { question: { content: "<p>Unknown access</p>" } } });
+    if (url === submitUrl) return Response.json({ submission_id: 308 });
+    return Response.json({ state: "SUCCESS", status_code: 10 });
+  }, { describe: () => assert.fail("Unknown problem access must not be converted") });
+
+  await window.fetch("/graphql/", graphqlOptions("questionContent"));
+  await window.fetch(submitUrl, submitOptions("saved regardless\n"));
+  await window.fetch("/submissions/detail/308/check/");
+  await setImmediate();
+  assert.equal(messages.length, 1);
+  assert.equal(bridgeMessages[0].submission.problem, undefined);
+  assert.equal(messages[0].submission.problem, undefined);
+});
+
+test("the current page-owned submission details query fills missing runtime and memory statistics", async () => {
+  const calls = [];
+  let historicalClones = 0;
+  const { window, messages } = page(async (url, options) => {
+    calls.push(url);
+    if (url === submitUrl) return Response.json({ submission_id: 307 });
+    if (url === "/submissions/detail/307/v2/check/") {
+      return Response.json({ state: "SUCCESS", status_code: 10, total_correct: 66, total_testcases: 66 });
+    }
+    assert.equal(url, "/graphql/");
+    const id = JSON.parse(options.body).variables.submissionId;
+    if (id !== 307) return { ok: true, clone() { historicalClones += 1; return Response.json({}); } };
+    return Response.json({ data: { submissionDetails: { statusCode: 10, runtimeDisplay: "12 ms",
+      memoryDisplay: "17.2 MB", runtimePercentile: 95.47, memoryPercentile: 74, code: "Do not use this source" } } });
+  }, { pathname: "/problems/two-sum/submissions/307/" });
+  const submissionDetails = id => ({ method: "POST", body: JSON.stringify({
+    operationName: "submissionDetails", variables: { submissionId: id },
+  }) });
+
+  const code = "exact source from Submit\n";
+  await window.fetch(submitUrl, submitOptions(code));
+  await window.fetch("/submissions/detail/307/v2/check/");
+  await setImmediate();
+  assert.equal(messages.length, 0);
+  await window.fetch("/graphql/", submissionDetails(123));
+  await window.fetch("/graphql/", submissionDetails(307));
+  await setImmediate();
+  assert.equal(historicalClones, 0);
+  assert.equal(messages.length, 1);
+  assert.deepEqual(calls, [submitUrl, "/submissions/detail/307/v2/check/", "/graphql/", "/graphql/"]);
+  assert.equal(messages[0].submission.code, code);
+  assert.deepEqual(messages[0].submission.stats, { runtime: "12 ms", memory: "17.2 MB",
+    runtimePercentile: 95.47, memoryPercentile: 74, testsPassed: 66, totalTests: 66 });
+});
+
+test("rendered fallback stays on the submitted problem and requires explicit non-premium status for text", () => {
+  const html = "<p>Visible statement</p>";
+  let reads = 0;
+  const { window, dispatchMessage, messages } = page(() => assert.fail("No metadata request expected"), {
+    pathname: "/problems/two-sum/submissions/303/",
+    document: {
+      querySelectorAll: () => [{ textContent: "1. Two Sum" }],
+      querySelector(selector) {
+        if (selector.includes("data-difficulty")) return { textContent: "Easy" };
+        if (selector.includes("description_content")) {
+          reads += 1;
+          return { innerHTML: html, checkVisibility: () => true };
+        }
+        return null;
+      },
+    },
+    describe: input => { assert.equal(input, html); return { overview: "Visible statement" }; },
+  });
+  function acceptance(id, problem) {
+    dispatchMessage({ type: "leetgit:accepted-submission", submission: {
+      id, slug: "two-sum", language: "python3", code: "source\n", acceptedAt: "2026-11-20T15:00:00.000Z", problem,
+    } });
+  }
+  acceptance("303");
+  acceptance("304", { paidOnly: false });
+  window.location.pathname = "/problems/other-question/";
+  acceptance("305", { paidOnly: false });
+  assert.equal(reads, 1);
+  assert.deepEqual(messages[0].submission.problem, {
+    title: "Two Sum", frontendId: "1", difficulty: "Easy", url: `${origin}/problems/two-sum/`,
+  });
+  assert.equal(messages[1].submission.problem.overview, "Visible statement");
+  assert.deepEqual(messages[2].submission.problem, { paidOnly: false, url: `${origin}/problems/two-sum/` });
+});
+
+test("missing or slow metadata cannot block an accepted solution", async () => {
+  let completeMetadata;
+  const pending = new Promise(resolve => { completeMetadata = resolve; });
+  const { window, messages } = page(async url => {
+    if (url === "/graphql/") return { ok: true, clone: () => ({ json: () => pending }) };
+    if (url === submitUrl) return Response.json({ submission_id: 306 });
+    return Response.json({ state: "SUCCESS", status_code: 10 });
+  }, { pathname: "/problems/two-sum/submissions/306/" });
+  await window.fetch("/graphql/", graphqlOptions("questionData"));
+  await window.fetch(submitUrl, submitOptions("saved regardless\n"));
+  await window.fetch("/submissions/detail/306/check/");
+  await delay(700);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].submission.code, "saved regardless\n");
+  assert.equal(messages[0].submission.problem, undefined);
+  completeMetadata({});
+  await setImmediate();
+  assert.equal(messages.length, 1);
 });

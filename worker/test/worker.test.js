@@ -217,33 +217,74 @@ test('Worker uses metadata only to check the pinned repository and rejects a vis
   await assert.rejects(checkInstallation('app-jwt', { ...session, repository_id: 21 }), { status: 403 });
 });
 
-test('Worker scopes writes to the repository ID and settles a racing duplicate without a second commit', async (t) => {
-  const file = { path: 'solutions/two-sum/python3.py', content: '# λ\nprint(1)\n', message: 'Solve two-sum' };
-  const encoded = Buffer.from(file.content).toString('base64');
-  let gets = 0;
-  let writes = 0;
+test('Worker scopes the atomic solution and README writes to the repository ID', async (t) => {
+  const sourcePath = 'solutions/two-sum/python3.py';
+  const readmePath = 'solutions/two-sum/README.md';
+  const submission = {
+    id: '120', slug: 'two-sum', language: 'python3', code: '# λ\nprint(1)\n',
+    acceptedAt: '2026-11-20T12:00:00.000Z',
+  };
+  const head = 'a'.repeat(40);
+  const root = 'b'.repeat(40);
+  const newTree = 'c'.repeat(40);
+  const newHead = 'd'.repeat(40);
+  const sourceBlob = 'e'.repeat(40);
+  const readmeBlob = 'f'.repeat(40);
+  const fileContents = [];
+  let refUpdates = 0;
   t.mock.method(globalThis, 'fetch', async (url, options) => {
     if (url.endsWith('/app/installations/5/access_tokens')) {
       assert.deepEqual(JSON.parse(options.body), { repository_ids: [13], permissions });
       return apiResponse({ token: 'one-repo-token', permissions, repositories: [repository] });
     }
     assert.equal(options.headers.Authorization, 'Bearer one-repo-token');
-    if (options.method === 'DELETE') return apiResponse(null, 204);
-    assert.equal(new URL(url).pathname, '/repos/test/solutions/contents/' + file.path);
-    if (options.method === 'GET') {
-      gets += 1;
-      return gets === 1 ? apiResponse(null, 404) : apiResponse({
-        type: 'file', sha: 'previous-sha', encoding: 'base64', content: encoded,
-      });
+    if (options.method === 'DELETE') {
+      assert.equal(new URL(url).pathname, '/installation/token');
+      return apiResponse(null, 204);
     }
-    writes += 1;
-    assert.deepEqual(JSON.parse(options.body), { message: file.message, content: encoded });
-    return apiResponse(null, 409);
+    const path = new URL(url).pathname;
+    const prefix = '/repos/test/solutions/git';
+    assert.ok(path.startsWith(prefix));
+    const resource = path.slice(prefix.length);
+    if (resource === '/ref/heads/main') {
+      return apiResponse({ ref: 'refs/heads/main', object: { type: 'commit', sha: head } });
+    }
+    if (resource === `/commits/${head}`) return apiResponse({ tree: { sha: root } });
+    if (resource === `/trees/${root}`) return apiResponse({ tree: [], truncated: false });
+    if (resource === '/blobs') {
+      const { content, encoding } = JSON.parse(options.body);
+      assert.equal(encoding, 'base64');
+      fileContents.push(Buffer.from(content, 'base64').toString());
+      return apiResponse({ sha: fileContents.length === 1 ? sourceBlob : readmeBlob }, 201);
+    }
+    if (resource === '/trees') {
+      assert.deepEqual(JSON.parse(options.body), {
+        base_tree: root,
+        tree: [
+          { path: sourcePath, type: 'blob', mode: '100644', sha: sourceBlob },
+          { path: readmePath, type: 'blob', mode: '100644', sha: readmeBlob },
+        ],
+      });
+      return apiResponse({ sha: newTree }, 201);
+    }
+    if (resource === '/commits') {
+      const { tree, parents, message } = JSON.parse(options.body);
+      assert.deepEqual({ tree, parents }, { tree: newTree, parents: [head] });
+      assert.match(message, /Solve Two Sum \(Python 3\)/);
+      return apiResponse({ sha: newHead }, 201);
+    }
+    assert.equal(resource, '/refs/heads/main');
+    assert.equal(options.method, 'PATCH');
+    assert.deepEqual(JSON.parse(options.body), { sha: newHead, force: false });
+    refUpdates += 1;
+    return apiResponse({ object: { sha: newHead } });
   });
-  assert.deepEqual(await syncFile('app-jwt', session, repository, file), {
-    outcome: 'unchanged', path: file.path,
-    url: 'https://github.com/test/solutions/blob/main/' + file.path,
+  assert.deepEqual(await syncFile('app-jwt', session, repository, submission), {
+    outcome: 'created', path: sourcePath,
+    url: 'https://github.com/test/solutions/blob/main/' + sourcePath,
+    readmeUrl: 'https://github.com/test/solutions/blob/main/' + readmePath,
   });
-  assert.equal(gets, 2);
-  assert.equal(writes, 1);
+  assert.equal(fileContents[0], submission.code);
+  assert.match(fileContents[1], /python3\.py/);
+  assert.equal(refUpdates, 1);
 });

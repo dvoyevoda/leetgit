@@ -1,4 +1,5 @@
-import { solutionFile } from './solution.js';
+import { commitSubmission, GitCommitError } from './commit.js';
+import { encodeRepository, normalizeRepositoryName } from './repository.js';
 
 const api = 'https://api.github.com';
 
@@ -8,19 +9,6 @@ export class SyncError extends Error {
     this.retry = retry;
     this.retryAfter = retryAfter;
   }
-}
-
-export function normalizeRepositoryName(value) {
-  const name = String(value ?? '').trim();
-  if (!/^[a-z\d](?:[a-z\d-]{0,38})\/[a-z\d_.-]{1,100}$/i.test(name) ||
-      ['.', '..'].includes(name.split('/')[1])) {
-    throw new SyncError('Enter the repository as owner/name.');
-  }
-  return name;
-}
-
-export function encodeRepository(name) {
-  return normalizeRepositoryName(name).split('/').map(encodeURIComponent).join('/');
 }
 
 export async function request(url, options) {
@@ -52,17 +40,17 @@ export async function expectJson(response, service) {
   throw new SyncError(`${service} returned HTTP ${status}.`, { retry: status >= 500 });
 }
 
-function githubRequest(path, token, write) {
+function githubRequest(path, token, { method = 'GET', body } = {}) {
   const headers = {
     Accept: 'application/vnd.github+json',
     Authorization: `Bearer ${token}`,
     'X-GitHub-Api-Version': '2022-11-28',
   };
-  if (write) headers['Content-Type'] = 'application/json';
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
   return request(`${api}${path}`, {
     headers,
-    method: write ? 'PUT' : 'GET',
-    body: write && JSON.stringify(write),
+    method,
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
 
@@ -71,7 +59,13 @@ export async function connectToken(name, input) {
   if (!/^github_pat_[a-zA-Z0-9_]{20,250}$/.test(token)) {
     throw new SyncError('Paste a fine-grained GitHub token beginning with github_pat_.');
   }
-  const response = await githubRequest(`/repos/${encodeRepository(name)}`, token);
+  let repoName;
+  try {
+    repoName = encodeRepository(name);
+  } catch (error) {
+    throw new SyncError(error.message);
+  }
+  const response = await githubRequest(`/repos/${repoName}`, token);
   const repo = await expectJson(response, 'GitHub');
   if (!Number.isSafeInteger(repo.id) || repo.id < 1 || !repo.default_branch ||
       typeof repo.default_branch !== 'string' || repo.archived || repo.disabled) {
@@ -86,16 +80,7 @@ export async function connectToken(name, input) {
   };
 }
 
-function encodeBase64(bytes) {
-  let binary = '';
-  for (let start = 0; start < bytes.length; start += 8192) {
-    binary += String.fromCharCode(...bytes.subarray(start, start + 8192));
-  }
-  return btoa(binary);
-}
-
 export async function syncToken(connection, submission) {
-  const file = solutionFile(submission);
   const { repository, token } = connection;
   const repoPath = `/repos/${encodeRepository(repository.fullName)}`;
   const repo = await expectJson(await githubRequest(repoPath, token), 'GitHub');
@@ -103,24 +88,19 @@ export async function syncToken(connection, submission) {
       typeof repo.default_branch !== 'string' || !repo.default_branch) {
     throw new SyncError('The repository identity or visibility changed. Review the destination, then reconnect.');
   }
-  const path = `${repoPath}/contents/${file.path}`;
-  const content = encodeBase64(new TextEncoder().encode(file.content));
-  const url = `https://github.com/${encodeRepository(repository.fullName)}/blob/${encodeURIComponent(repo.default_branch)}/${file.path}`;
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await githubRequest(`${path}?ref=${encodeURIComponent(repo.default_branch)}`, token);
-    const current = response.status === 404 ? null : await expectJson(response, 'GitHub');
-    if (current && (current.type !== 'file' || typeof current.sha !== 'string')) {
-      throw new SyncError('The destination path is occupied by something other than a file.');
+  try {
+    return await commitSubmission({
+      request: (path, options) => githubRequest(path, token, options),
+      repository: { full_name: repository.fullName, default_branch: repo.default_branch },
+      submission,
+    });
+  } catch (error) {
+    if (!(error instanceof GitCommitError)) throw error;
+    if (error.response && (error.status === 401 || error.status === 429 ||
+        error.response.headers.get('X-RateLimit-Remaining') === '0' ||
+        (error.status === 403 && error.response.headers.has('Retry-After')))) {
+      await expectJson(error.response, 'GitHub');
     }
-    if (current?.content?.replace(/\s/g, '') === content) {
-      return { outcome: 'unchanged', path: file.path, url };
-    }
-    const update = { message: file.message, content, branch: repo.default_branch };
-    if (current) update.sha = current.sha;
-    const result = await githubRequest(path, token, update);
-    if (result.status === 409 && attempt === 0) continue;
-    await expectJson(result, 'GitHub');
-    return { outcome: current ? 'updated' : 'created', path: file.path, url };
+    throw new SyncError(error.message, { retry: error.retry || error.status >= 500 });
   }
 }

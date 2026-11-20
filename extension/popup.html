@@ -8,12 +8,9 @@
   <script type="module" src="popup.js"></script>
 </head>
 <body>
-  <header>
-    <img class="mark" src="icons/32.png" alt="" width="32" height="32">
-    <div>
-      <h1>LeetGit</h1>
-      <p>Accepted LeetCode solutions → GitHub</p>
-    </div>
+  <header class="brand">
+    <img src="icons/32.png" alt="" width="32" height="32">
+    <h1>LeetGit</h1>
   </header>
 
   <main>
@@ -21,28 +18,87 @@
 
     <section id="connected" hidden aria-label="Sync status">
       <div class="destination">
-        <div><a id="repository" target="_blank" rel="noreferrer"></a><span id="visibility"></span></div>
-        <p id="sync-status"></p>
-        <a id="file" target="_blank" rel="noreferrer" hidden>View solution on GitHub ↗</a>
+        <div class="destination-name">
+          <p class="label">Destination</p>
+          <a id="repository" target="_blank" rel="noreferrer"></a>
+        </div>
+        <span id="visibility" class="visibility"></span>
       </div>
-      <div class="row">
-        <button id="retry" type="button" hidden>Retry now</button>
-        <button id="reconnect" type="button" class="secondary">Reconnect</button>
-        <button id="disconnect" type="button" class="secondary">Disconnect</button>
+
+      <div id="activity" class="activity" data-state="ready" aria-live="polite">
+        <div class="activity-heading">
+          <span id="status-icon" class="status-icon" aria-hidden="true">·</span>
+          <div>
+            <h2 id="sync-status">Ready to sync</h2>
+            <p id="sync-description"></p>
+          </div>
+        </div>
+
+        <div id="submission-meta" class="submission-meta" hidden>
+          <span id="difficulty" hidden></span>
+          <span id="language" hidden></span>
+          <time id="accepted-at" hidden></time>
+        </div>
+        <dl id="metrics" class="metrics" hidden>
+          <div id="runtime-stat" hidden>
+            <dt>Runtime</dt>
+            <dd id="runtime-value"></dd>
+            <dd id="runtime-percentile" class="percentile" hidden></dd>
+          </div>
+          <div id="memory-stat" hidden>
+            <dt>Memory</dt>
+            <dd id="memory-value"></dd>
+            <dd id="memory-percentile" class="percentile" hidden></dd>
+          </div>
+        </dl>
+
+        <div id="activity-links" class="activity-links" hidden>
+          <a id="file" target="_blank" rel="noreferrer" hidden><span id="file-label">View code</span> <span aria-hidden="true">↗</span></a>
+          <a id="readme" target="_blank" rel="noreferrer" hidden>View README <span aria-hidden="true">↗</span></a>
+        </div>
+        <button id="retry" type="button" class="button" hidden>Retry now</button>
       </div>
+
+      <details id="settings" class="settings">
+        <summary><span aria-hidden="true">⚙</span> Settings</summary>
+        <div class="settings-content">
+          <label class="checkbox" for="include-problem-text">
+            <input id="include-problem-text" type="checkbox" aria-describedby="problem-text-help">
+            Include full problem text
+          </label>
+          <p id="problem-text-help">Include the visible problem description in GitHub READMEs. Enable if you have permission to share it.</p>
+          <div class="actions">
+            <button id="reconnect" type="button" class="text-button">Reconnect</button>
+            <button id="disconnect" type="button" class="text-button">Disconnect</button>
+          </div>
+        </div>
+      </details>
     </section>
 
     <section id="setup" hidden aria-label="Connect a repository">
-      <button id="connect-app" type="button" hidden>Connect with GitHub</button>
-      <form id="token-form" autocomplete="off">
-        <label for="repo-input">GitHub repository</label>
-        <input id="repo-input" name="repository" type="text" placeholder="owner/solutions" spellcheck="false" required>
-        <button id="create-token" type="button" class="secondary">Create GitHub token ↗</button>
-        <p class="hint">Choose <strong>Only select repositories</strong> on GitHub, select this one repository and leave <strong>Contents</strong> set to <strong>Read and write</strong>.</p>
+      <div class="setup-heading">
+        <h2 id="setup-title">Connect a repository</h2>
+        <p id="setup-purpose">Choose one GitHub repository for your accepted solutions.</p>
+      </div>
+      <button id="connect-app" type="button" class="button full-width" hidden>Connect with GitHub</button>
+      <p id="setup-divider" class="setup-divider" hidden>or use a token</p>
 
-        <label for="token-input">Fine-grained token</label>
-        <input id="token-input" name="token" type="password" placeholder="github_pat_…" spellcheck="false" required>
-        <button id="connect-token" type="submit">Connect repository</button>
+      <form id="token-form" autocomplete="off">
+        <div class="field">
+          <label for="repo-input">GitHub repository</label>
+          <input id="repo-input" name="repository" type="text" placeholder="owner/repository or GitHub URL" autocapitalize="none" spellcheck="false" required>
+        </div>
+
+        <div class="token-instructions">
+          <button id="create-token" type="button" class="text-button">Create GitHub token <span aria-hidden="true">↗</span></button>
+          <p>On GitHub, choose <strong>Only select repositories</strong>, select this repository, and grant <strong>Contents: Read and write</strong>.</p>
+        </div>
+
+        <div class="field">
+          <label for="token-input">Fine-grained token</label>
+          <input id="token-input" name="token" type="password" placeholder="github_pat_…" spellcheck="false" required>
+        </div>
+        <button id="connect-token" type="submit" class="button full-width">Connect repository</button>
       </form>
     </section>
   </main>

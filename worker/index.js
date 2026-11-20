@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { MAX_CODE_BYTES, normalizeSubmission, solutionFile } from '../extension/solution.js';
+import { MAX_CODE_BYTES, MAX_PROBLEM_BYTES, normalizeSubmission } from '../extension/solution.js';
 import {
   checkInstallation,
   getUserToken,
@@ -15,8 +15,8 @@ import {
 
 const FLOW_TTL = 15 * 60;
 const SESSION_TTL = 90 * 24 * 60 * 60;
-// JSON may escape a source byte as a six-character Unicode sequence.
-const MAX_BODY_BYTES = 6 * MAX_CODE_BYTES + 2048;
+// JSON may escape a text byte as a six-character Unicode sequence.
+const MAX_BODY_BYTES = 6 * (MAX_CODE_BYTES + MAX_PROBLEM_BYTES) + 2048;
 const RANDOM_TOKEN = /^[a-zA-Z0-9_-]{43}$/;
 const CLIENT_STATE = /^[a-zA-Z0-9_-]{16,128}$/;
 const EXTENSION_ID = /^[a-p]{32}$/;
@@ -277,12 +277,12 @@ async function handleApi(request, env, url) {
         return withCors(response(null, 204), origin);
       }
 
-      const file = isSession ? null : solutionFile(await readSubmission(request));
+      const submission = isSession ? null : await readSubmission(request);
       const jwt = githubAppJWT(env);
       const repo = await checkInstallation(jwt, session);
       result = isSession ?
         json({ repository: repositoryInfo(repo) }) :
-        json(await syncFile(jwt, session, repo, file));
+        json(await syncFile(jwt, session, repo, submission));
     } catch (error) {
       if (error instanceof GitHubError) {
         result = json({ error: error.message }, error.status);

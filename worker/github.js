@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { sign } from 'node:crypto';
+import { commitSubmission, GitCommitError } from '../extension/commit.js';
 
 const API = 'https://api.github.com';
 const GITHUB = 'https://github.com';
@@ -214,47 +215,7 @@ export function repositoryInfo(repo) {
   return { id: repo.id, fullName: repo.full_name, url: `${GITHUB}/${repo.full_name}`, private: repo.private };
 }
 
-async function writeFile(token, repo, file) {
-  const path = file.path.split('/').map(encodeURIComponent).join('/');
-  const url = `/repos/${repo.full_name}/contents/${path}`;
-  const fileURL = `${GITHUB}/${repo.full_name}/blob/${encodeURIComponent(repo.default_branch)}/${path}`;
-  const content = Buffer.from(file.content, 'utf8').toString('base64');
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const existingResponse = await githubRequest(url, token);
-    let existing;
-    if (existingResponse.ok) {
-      existing = await existingResponse.json();
-      if (existing.type !== 'file' || typeof existing.sha !== 'string') {
-        throw new GitHubError('A directory or another unsupported item exists at the solution path.', 409);
-      }
-      if (existing.encoding === 'base64' && existing.content?.replace(/\s/g, '') === content) {
-        return { path: file.path, url: existing.html_url || fileURL, outcome: 'unchanged' };
-      }
-    } else if (existingResponse.status !== 404) {
-      throw new GitHubError('GitHub could not read the solution path.', existingResponse.status);
-    }
-
-    const body = { message: file.message, content };
-    if (existing) body.sha = existing.sha;
-    const response = await githubRequest(url, token, 'PUT', body);
-    if (response.ok) {
-      const saved = await response.json();
-      return {
-        path: file.path,
-        url: saved.content?.html_url || fileURL,
-        outcome: existing ? 'updated' : 'created',
-      };
-    }
-    if ([409, 422].includes(response.status) && attempt < 2) continue;
-    if ([403, 409, 422].includes(response.status)) {
-      throw new GitHubError('GitHub rejected the commit. Check the default branch and any branch rules.', response.status);
-    }
-    throw new GitHubError('GitHub could not write the solution.', response.status);
-  }
-}
-
-export async function syncFile(jwt, session, repo, file) {
+export async function syncFile(jwt, session, repo, submission) {
   const repositoryId = session.repository_id;
   const result = await getInstallationToken(
     jwt, session.installation_id, { contents: 'write', metadata: 'read' }, repositoryId,
@@ -264,7 +225,18 @@ export async function syncFile(jwt, session, repo, file) {
         result.repositories[0].id !== repositoryId) {
       throw disconnected();
     }
-    return await writeFile(result.token, repo, file);
+    return await commitSubmission({
+      request: (path, { method, body } = {}) => githubRequest(path, result.token, method, body),
+      repository: repo,
+      submission,
+    });
+  } catch (error) {
+    if (!(error instanceof GitCommitError)) throw error;
+    if (error.response && (error.status === 429 || error.response.headers.get('X-RateLimit-Remaining') === '0' ||
+        (error.status === 403 && error.response.headers.has('Retry-After')))) {
+      throw new GitHubError('GitHub is rate limiting requests. Try again later.', 429);
+    }
+    throw new GitHubError(error.message, error.status);
   } finally {
     await revokeInstallationToken(result.token);
   }

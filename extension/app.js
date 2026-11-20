@@ -1,5 +1,6 @@
 import { workerOrigin } from './config.js';
-import { expectJson, normalizeRepositoryName, request, SyncError } from './github.js';
+import { expectJson, request, SyncError } from './github.js';
+import { normalizeRepositoryName } from './repository.js';
 
 export async function appRequest(path, token, method = 'GET', data) {
   const headers = { Authorization: `Bearer ${token}` };
