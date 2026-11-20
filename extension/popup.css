@@ -1,0 +1,53 @@
+:root {
+  color-scheme: light dark;
+  --background: #f6f7f3;
+  --surface: #fff;
+  --ink: #16261f;
+  --muted: #455a4f;
+  --line: #cbd5cb;
+  --accent: #0b5c40;
+  --accent-ink: #fff;
+  --problem: #9e361d;
+  font: 13px/1.45 system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #19241f;
+    --surface: #222f28;
+    --ink: #f2f8f2;
+    --muted: #baccc0;
+    --line: #465b50;
+    --accent: #a3e7b8;
+    --accent-ink: #102a1b;
+    --problem: #ffb69e;
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { width: 350px; margin: 0; color: var(--ink); background: var(--background); }
+header { display: flex; align-items: center; gap: 10px; padding: 17px 18px; border-bottom: 1px solid var(--line); }
+h1 { margin: 0; font-size: 19px; line-height: 1.2; letter-spacing: -.035em; }
+p { margin: 0; }
+header p, .hint { color: var(--muted); font-size: 12px; }
+main { padding: 16px 18px 18px; }
+.notice { margin-bottom: 12px; }
+.notice[data-error] { color: var(--problem); }
+.destination { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 11px; margin-bottom: 11px; overflow-wrap: anywhere; }
+#repository { font-weight: 650; }
+#visibility { font-size: 11px; margin-left: 7px; color: var(--muted); }
+#sync-status { margin: 4px 0; color: var(--muted); }
+.row { display: flex; gap: 6px; flex-wrap: wrap; }
+form { display: flex; flex-direction: column; gap: 6px; }
+#connected:not([hidden]) + #setup { margin-top: 16px; }
+#connect-app { width: 100%; margin-bottom: 14px; }
+label { font-weight: 630; }
+input { width: 100%; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 8px 9px; font: inherit; }
+button { cursor: pointer; color: var(--accent-ink); background: var(--accent); font: inherit; font-weight: 650; border: 1px solid var(--accent); border-radius: 7px; padding: 7px 9px; }
+button.secondary { color: var(--accent); background: transparent; border-color: var(--line); }
+button:disabled { cursor: wait; opacity: .65; }
+button:hover:not(:disabled) { filter: brightness(.92); }
+.hint { margin-bottom: 5px; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

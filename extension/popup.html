@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LeetRelay</title>
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="popup.js"></script>
+</head>
+<body>
+  <header>
+    <img class="mark" src="icons/32.png" alt="" width="32" height="32">
+    <div>
+      <h1>LeetRelay</h1>
+      <p>Accepted LeetCode solutions → GitHub</p>
+    </div>
+  </header>
+
+  <main>
+    <p id="notice" class="notice" role="status">Checking connection…</p>
+
+    <section id="connected" hidden aria-label="Sync status">
+      <div class="destination">
+        <div><a id="repository" target="_blank" rel="noreferrer"></a><span id="visibility"></span></div>
+        <p id="sync-status"></p>
+        <a id="file" target="_blank" rel="noreferrer" hidden>View solution on GitHub ↗</a>
+      </div>
+      <div class="row">
+        <button id="retry" type="button" hidden>Retry now</button>
+        <button id="reconnect" type="button" class="secondary">Reconnect</button>
+        <button id="disconnect" type="button" class="secondary">Disconnect</button>
+      </div>
+    </section>
+
+    <section id="setup" hidden aria-label="Connect a repository">
+      <button id="connect-app" type="button" hidden>Connect with GitHub</button>
+      <form id="token-form" autocomplete="off">
+        <label for="repo-input">GitHub repository</label>
+        <input id="repo-input" name="repository" type="text" placeholder="owner/solutions" spellcheck="false" required>
+        <button id="create-token" type="button" class="secondary">Create GitHub token ↗</button>
+        <p class="hint">Choose <strong>Only select repositories</strong> on GitHub, select this one repository and leave <strong>Contents</strong> set to <strong>Read and write</strong>.</p>
+
+        <label for="token-input">Fine-grained token</label>
+        <input id="token-input" name="token" type="password" placeholder="github_pat_…" spellcheck="false" required>
+        <button id="connect-token" type="submit">Connect repository</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
