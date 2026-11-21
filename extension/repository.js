@@ -33,10 +33,10 @@ export function githubTokenForm(value, noExpiration = false) {
   const [owner, repository] = name.split('/');
   const url = new URL('https://github.com/settings/personal-access-tokens/new');
   url.search = new URLSearchParams({
-    name: `LeetGit - ${repository}`.slice(0, 40),
+    name: 'SolveToGit - LeetCode to Github Sync',
     description: `Sync LeetCode solutions to ${name}. Choose Only select repositories and select only ${repository}.`,
     target_name: owner,
-    expires_in: noExpiration ? 'none' : '366',
+    expires_in: noExpiration ? 'none' : '365',
     contents: 'write',
   });
   return url.href;

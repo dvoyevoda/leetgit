@@ -7,11 +7,11 @@ import { checkInstallation, githubAppJWT, repositoryInfo, syncFile } from '../gi
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const id = 'abcdefghijklmnopabcdefghijklmnop';
 const redirect = `https://${id}.chromiumapp.org/github`;
-const origin = 'https://leetgit.example';
+const origin = 'https://solvetogit.example';
 const env = {
   APP_ORIGIN: origin,
   EXTENSION_IDS: id,
-  GITHUB_APP_SLUG: 'leetgit-test',
+  GITHUB_APP_SLUG: 'solvetogit-test',
   GITHUB_CLIENT_ID: 'Iv1.test',
   GITHUB_CLIENT_SECRET: 'example-test-secret',
   GITHUB_PRIVATE_KEY: privateKey.export({ format: 'pem', type: 'pkcs1' }),

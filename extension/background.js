@@ -117,7 +117,7 @@ async function enqueue(input, tabId) {
     return { queued: false };
   }
   if (state.pending.length >= maxPending) {
-    const message = 'LeetGit’s queue is full. Retry the pending syncs, then resubmit.';
+    const message = 'SolveToGit’s queue is full. Retry the pending syncs, then resubmit.';
     notifyTab(tabId, submission.slug, 'blocked', { message });
     throw new SyncError(message);
   }
@@ -171,7 +171,7 @@ async function flush(force = false) {
     const retry = error instanceof SyncError ? error.retry : true;
     const delay = Math.min(2 ** Math.min(item.attempts - 1, 6) * 60000, 30 * 60000);
     state.error = {
-      message: error instanceof SyncError ? error.message : 'Sync was interrupted. LeetGit will retry.',
+      message: error instanceof SyncError ? error.message : 'Sync was interrupted. SolveToGit will retry.',
       nextAt: retry ? Date.now() + Math.max(delay, error.retryAfter || 0) : null,
     };
     if (item.attempts === 1 || force) {
@@ -253,7 +253,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
 
   operation.then(
     result => respond({ ok: true, ...result }),
-    error => respond({ ok: false, error: error instanceof SyncError ? error.message : 'LeetGit could not complete that action.' }),
+    error => respond({ ok: false, error: error instanceof SyncError ? error.message : 'SolveToGit could not complete that action.' }),
   );
   return true;
 });

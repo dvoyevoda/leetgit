@@ -260,7 +260,7 @@ export async function commitSubmission({ request, repository, submission }) {
     head = currentHead;
   }
 
-  throw new GitCommitError('The default branch moved repeatedly. LeetGit will retry the sync.', {
+  throw new GitCommitError('The default branch moved repeatedly. SolveToGit will retry the sync.', {
     status: 409, retry: true,
   });
 }

@@ -223,7 +223,7 @@ function render(state, preserveNotice = false) {
 async function command(type, data = {}) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const result = await chrome.runtime.sendMessage({ type, ...data, tabId: tab?.id });
-  if (!result?.ok) throw new Error(result?.error ?? 'Could not reach LeetGit. Try reopening it.');
+  if (!result?.ok) throw new Error(result?.error ?? 'Could not reach SolveToGit. Try reopening it.');
   return result;
 }
 

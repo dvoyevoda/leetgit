@@ -72,7 +72,7 @@
     const close = document.createElement('button');
     close.type = 'button';
     close.textContent = '×';
-    close.setAttribute('aria-label', 'Dismiss LeetGit status');
+    close.setAttribute('aria-label', 'Dismiss SolveToGit status');
     close.addEventListener('click', dismiss);
     box.append(mark, content, close);
     shadow.append(css, box);

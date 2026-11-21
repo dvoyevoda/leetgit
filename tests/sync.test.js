@@ -18,16 +18,18 @@ test('GitHub token templates prefill the repository details and use GitHub’s s
   const form = new URL(githubTokenForm(repository));
   assert.equal(form.origin + form.pathname, 'https://github.com/settings/personal-access-tokens/new');
   assert.deepEqual(Object.fromEntries(form.searchParams), {
-    name: 'LeetGit - my-solutions',
+    name: 'SolveToGit - LeetCode to Github Sync',
     description: 'Sync LeetCode solutions to owner/my-solutions. Choose Only select repositories and select only my-solutions.',
     target_name: 'owner',
-    expires_in: '366',
+    expires_in: '365',
     contents: 'write',
   });
-  assert.equal(new URL(githubTokenForm(repository, true)).searchParams.get('expires_in'), 'none');
+  const noExpiration = new URL(githubTokenForm(repository, true));
+  assert.equal(noExpiration.searchParams.get('expires_in'), 'none');
+  assert.equal(noExpiration.searchParams.get('name'), 'SolveToGit - LeetCode to Github Sync');
   const longRepo = `owner/${'a'.repeat(100)}`;
   const longForm = new URL(githubTokenForm(longRepo));
-  assert.equal(longForm.searchParams.get('name').length, 40);
+  assert.equal(longForm.searchParams.get('name'), 'SolveToGit - LeetCode to Github Sync');
   assert.ok(longForm.searchParams.get('description').includes(longRepo));
   assert.throws(() => githubTokenForm('https://example.com/owner/repo'), /GitHub repository URL/);
 });

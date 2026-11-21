@@ -1,59 +1,53 @@
-# LeetGit
+# SolveToGit
 
-LeetGit is a Chrome extension that saves your accepted LeetCode submissions to one GitHub repository. It uses your existing LeetCode session and does not ask for your LeetCode password.
+SolveToGit saves accepted LeetCode solutions to one GitHub repository you choose. Each sync commits your exact source and a problem README together, with the verdict, runtime, memory, and test results LeetCode provides.
+
+[Download for Chrome](https://github.com/dvoyevoda/solvetogit/releases/latest) · [Privacy policy](PRIVACY.md) · [Help and feedback](#help-and-feedback)
+
+![SolveToGit popup showing an accepted solution saved to a selected GitHub repository](docs/assets/sync-preview.png)
 
 ## Install on Chrome
 
-1. Download the Chrome ZIP and extract it. [Latest LeetGit release](https://github.com/dvoyevoda/leetgit/releases/latest)
-2. Open `chrome://extensions` in Chrome and turn on **Developer mode**.
-3. Click **Load unpacked** and select the `extension` folder containing `manifest.json`.
-4. Open LeetGit from Chrome’s Extensions menu. Reload any LeetCode tabs that were already open. [Chrome’s extension installation guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked)
+1. Download and extract the manual-install Chrome ZIP from the latest release.
+2. Open `chrome://extensions`, turn on **Developer mode**, and click **Load unpacked**.
+3. Select the extracted `extension` folder. Open SolveToGit from the Extensions menu and refresh any LeetCode tabs that were already open. [Chrome’s extension installation guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked)
 
-If you already installed LeetGit, copy the new files into the same unpacked `extension` folder. Follow the same steps if your installed version still says LeetRelay. Keep your `config.js` if you configured a GitHub App companion. Click **Reload** on the extension’s card in `chrome://extensions`, then refresh any open LeetCode tabs. Updating in place preserves your saved repository connection.
+Upgrading an unpacked copy? Copy the new files into the same `extension` folder Chrome already loads, then click **Reload** and refresh LeetCode. This also applies to copies labeled LeetGit or LeetRelay. Keep your `config.js` if you configured the self-hosted GitHub App companion.
 
 ## Connect one repository
 
-Create or choose a GitHub repository for your solutions. Initialize a new repository with a README so it has a default branch. You can keep the solutions repository private, even if LeetGit’s source is public.
+Choose or create a GitHub repository for your solutions. Starting a new repository with a README creates its default branch. Use a private repository if you want your solutions to stay private.
 
-1. Paste the GitHub repository URL or enter `owner/repository`, then click **Create GitHub token**. The form opens with the resource owner, a repository-specific name and description, **Contents → Read and write**, and a 366-day expiration. To request a longer-lived token, check **Request no expiration** before opening the form. GitHub account or organization policies may limit the lifetime. [GitHub’s supported form fields](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#supported-query-parameters)
-2. Verify the repository’s owner under **Resource owner**. Under **Repository access**, choose **Only select repositories** and select the repository named in the description. GitHub requires this selection on its form. Check the permission list before generating the token. GitHub adds read-only **Metadata** automatically. [GitHub’s token guide](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)
-3. Copy the token beginning with `github_pat_`, paste it into LeetGit, and click **Connect repository**. Repeat the setup with a new token when it expires.
+1. Paste its GitHub URL or enter `owner/repository`, then click **Create GitHub token**. SolveToGit pre-fills the owner, a 365-day lifetime, a description naming your repository, and **Contents → Read and write**. Account and organization policies may limit the lifetime. [GitHub’s supported form fields](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#supported-query-parameters)
+2. On GitHub, verify the resource owner. Under **Repository access**, choose **Only select repositories** and select your destination. Confirm **Contents → Read and write** before generating the token. [GitHub’s token setup guide](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)
+3. Paste the new `github_pat_` token into SolveToGit and click **Connect repository**. Submit a solution on a signed-in `leetcode.com` practice page. An **Accepted** result triggers the sync and confirms GitHub write access once it succeeds.
 
-The popup remembers the repository field when you close it. An unfinished token stays in Chrome’s extension memory until you finish setup or close Chrome.
-
-For a button-based setup without copying a token, a maintainer can deploy the optional [GitHub App companion](worker/DEPLOY.md). During GitHub installation, choose **Only select repositories** and select exactly one repository.
+The popup remembers the repository field when you close it. An unfinished token stays in Chrome’s extension memory until you finish setup or close Chrome. To replace an expired or revoked token, use **Settings → Reconnect**. The self-hosted edition also supports a GitHub App. [Companion deployment guide](worker/DEPLOY.md)
 
 ## What gets saved
 
-Each accepted submission updates a problem folder and its README in one Git commit. With the LeetCode problem number, Two Sum is saved in `solutions/1-two-sum/` alongside a source file such as `python3.py`. A previously saved slug-only folder moves to the numbered name on its next sync when the number is available and the destination is free. The README includes the problem link, available difficulty and topics, a source preview, and the latest accepted results per language. Runtime, memory, percentiles, and test counts appear when LeetCode supplies them. Add your own notes outside the generated section to keep them across updates.
+- Each problem has its own folder. For example, Two Sum uses `solutions/1-two-sum/`, with `README.md` and a source file such as `python3.py`.
+- The README contains the problem link, available difficulty and topics, a code preview, and the latest accepted results per language. Runtime, memory, percentiles, and test counts appear when LeetCode provides them.
+- SolveToGit includes available full text for non-premium problems by default. Turn off **Include full problem text** in Settings to save a short overview and official link. Include full text where you have permission to share it. [LeetCode Terms of Service](https://leetcode.com/terms/)
+- Existing slug-only folders move to the numbered path on the next sync when the number is available and the path is free. Keep your own notes outside the generated section to preserve them through updates.
 
-The README includes the full visible text of non-premium problems by default when LeetCode supplies it. In **Settings**, turn off **Include full problem text** to use the short overview and official link. Use the full text option where you have permission to share the description. [LeetCode Terms of Service](https://leetcode.com/terms/)
-
-## Verify with a previous solution
-
-1. In your signed-in Chrome window, open a previously solved problem on `leetcode.com`.
-2. In its **Submissions** tab, open an **Accepted** submission. Put that exact solution in the editor and choose the same language.
-3. Click **Submit** and wait for the **Saved to GitHub** or **Updated on GitHub** message. The Chrome toolbar shows a green check on that problem after a successful sync. Navigate to an unsynced problem and it clears.
-4. Open the problem README from the popup or the on-page message. Check the results and confirm the source file matches what you submitted. A fresh resubmission can update the results even when its code is identical. Resubmit earlier solves to add READMEs for them.
-
-Open the LeetGit popup to see status for the problem in the active LeetCode tab. If a sync fails, correct the reported issue and click **Retry now**. Other queued syncs can be retried from **Settings**.
+The popup follows the active problem. After a successful sync, the toolbar shows a green check on that problem and the popup links to the code and README. The retry queue handles temporary sync failures. [Privacy policy](PRIVACY.md)
 
 ## Help and feedback
 
-- **GitHub denies access or the token expired.** Open **Settings → Reconnect** and use a fine-grained token scoped to the destination repository with **Contents → Read and write**. If your organization requires approval, check the token’s status on GitHub.
-- **The destination has no default branch or rejects commits.** Initialize an empty repository with a README. If the default branch is protected, use a destination repository whose default branch allows you to commit directly.
-- **The popup doesn't detect LeetCode.** After installing or updating the extension, refresh the `leetcode.com` problem tab. LeetGit syncs when **Submit** receives an **Accepted** result.
+- **GitHub denies access or the token expired.** Use **Settings → Reconnect** with a fine-grained token scoped to the destination and **Contents → Read and write**. If your organization requires approval, check the token’s status on GitHub.
+- **The destination rejects commits.** Initialize an empty repository with a README. If the default branch is protected, use a destination whose default branch allows direct commits.
+- **SolveToGit doesn't detect LeetCode.** Refresh the `leetcode.com` problem tab after installing or updating. Use **Submit** and wait for **Accepted**.
+- **A sync is waiting.** Fix the error shown in the popup and use **Retry now**. You can retry other queued syncs from Settings.
 
-If the problem persists, include the LeetGit version from `chrome://extensions`, the popup error, and the steps to reproduce it. Remove tokens, solution code, and private repository details before posting. [Report a bug or share feedback on GitHub](https://github.com/dvoyevoda/leetgit/issues/new)
-
-## Data and access
-
-In token mode, Chrome stores the token locally and LeetGit sends submissions and the token directly to the GitHub API. GitHub enforces the token’s scope, so select exactly one repository when generating the token. LeetGit cannot inspect the full grant list. GitHub fine-grained tokens also have read access to public repositories. You can revoke yours in [personal access token settings](https://github.com/settings/personal-access-tokens). GitHub App mode sends the submitted source through the configured companion on its way to GitHub.
+Include the extension version, popup error, and steps to reproduce when opening an issue. Remove tokens, private repository details, and solution code before posting. [Report a bug or share feedback](https://github.com/dvoyevoda/solvetogit/issues/new)
 
 ## Development
 
-Run `npm test` from the project root with Node.js 22 or newer. The extension itself has no build step. Use Chrome’s [extension debugging guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/debug) to inspect the extension after making edits.
+Run `npm test` with Node.js 22 or newer. Load the `extension` folder in Chrome to test source changes. The extension runs without a compilation step. [Chrome’s debugging guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/debug)
+
+The Store package uses direct GitHub token authentication. See the [Chrome Web Store submission guide](docs/CHROME_WEB_STORE.md) for the build command, listing copy, and reviewer walkthrough.
 
 ## License and credit
 
-LeetGit is maintained by [@dvoyevoda](https://github.com/dvoyevoda) and released under the [MIT License](LICENSE). The idea was inspired by [LeetSync](https://github.com/LeetSync/LeetSync).
+SolveToGit is maintained by [@dvoyevoda](https://github.com/dvoyevoda) and released under the [MIT License](LICENSE). The idea was inspired by [LeetSync](https://github.com/LeetSync/LeetSync).

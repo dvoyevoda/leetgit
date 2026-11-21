@@ -4,9 +4,9 @@ This optional Cloudflare Worker lets users connect in the browser without creati
 
 ## Register the GitHub App
 
-1. Choose the Worker’s HTTPS origin, such as `https://leetgit.YOUR-SUBDOMAIN.workers.dev`. Load the unpacked extension, then copy the ID shown on its card at `chrome://extensions`.
+1. Choose the Worker’s HTTPS origin, such as `https://solvetogit.YOUR-SUBDOMAIN.workers.dev`. Load the unpacked extension, then copy the ID shown on its card at `chrome://extensions`.
 2. [Register a GitHub App](https://github.com/settings/apps/new) with the origin as the homepage. Set the **Callback URL** to `APP_ORIGIN/auth/callback` and the **Setup URL** to `APP_ORIGIN/auth/install`. Replace `APP_ORIGIN` with the full HTTPS origin. Enable **Redirect on update**.
-3. Leave **Request user authorization (OAuth) during installation**, **Enable Device Flow**, and **Webhook → Active** unchecked. LeetGit starts the authorization flow when the user connects.
+3. Leave **Request user authorization (OAuth) during installation**, **Enable Device Flow**, and **Webhook → Active** unchecked. SolveToGit starts the authorization flow when the user connects.
 4. Give the app only **Repository permissions → Contents → Read and write**, plus the mandatory read-only **Metadata** permission. **Only on this account** is enough for personal use. To allow other users to install it, choose **Any account**. [GitHub’s app registration guide](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app)
 5. From the registered app’s settings, note its slug and **Client ID**, generate a **Client secret**, and generate a **Private key**. Keep the client secret and downloaded PEM out of Git and the extension.
 
@@ -16,7 +16,7 @@ Run these commands from the `worker/` directory. Choose the Cloudflare account t
 
 ```sh
 npx wrangler login
-npx wrangler d1 create leetgit
+npx wrangler d1 create solvetogit
 ```
 
 In `wrangler.toml`, set `database_id` to the returned D1 ID, keep its `DB` binding, and use the same `database_name` as in the create command. Set these Worker variables in the same file.
@@ -39,7 +39,7 @@ Paste the client secret at Wrangler’s prompt. Each secret upload deploys a new
 
 ## Connect and verify
 
-1. Set the deployed Worker origin in `extension/config.js`. Reload the extension at `chrome://extensions`, then open LeetGit, click **Connect with GitHub**, and allow access to that Worker origin when Chrome asks.
+1. Set the deployed Worker origin in `extension/config.js`. Reload the extension at `chrome://extensions`, then open SolveToGit, click **Connect with GitHub**, and allow access to that Worker origin when Chrome asks.
 2. On GitHub, install the App on your personal account, choose **Only select repositories**, select one initialized repository, and complete authorization. The companion checks the installation and repository before issuing a session.
 3. Follow the [live test steps](../README.md#verify-with-a-previous-solution). For a public rollout, test installation with a second GitHub account and confirm installations selecting multiple repositories cannot connect.
 

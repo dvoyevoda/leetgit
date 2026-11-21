@@ -71,7 +71,7 @@ function page(title, description, status, link = '', headers = {}) {
   return response(
     `<!doctype html><html lang="en"><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${title} · LeetGit</title><main><h1>${title}</h1>
+    <title>${title} · SolveToGit</title><main><h1>${title}</h1>
     <p>${description}</p>${link}</main></html>`,
     status,
     { 'Content-Type': 'text/html; charset=utf-8', ...headers },
@@ -157,7 +157,7 @@ function finishFlow(flow, result) {
 }
 
 function missingFlow() {
-  return page('Setup expired', 'Open LeetGit and start GitHub setup again.', 400);
+  return page('Setup expired', 'Open SolveToGit and start GitHub setup again.', 400);
 }
 
 async function handleSetup(request, env, url) {
@@ -166,7 +166,7 @@ async function handleSetup(request, env, url) {
     const redirectUri = url.searchParams.get('redirect_uri');
     const state = url.searchParams.get('state');
     if (!allowedRedirect(env, redirectUri) || !state || !CLIENT_STATE.test(state)) {
-      return page('Invalid setup link', 'Open LeetGit and start GitHub setup again.', 400);
+      return page('Invalid setup link', 'Open SolveToGit and start GitHub setup again.', 400);
     }
     return startFlow(env, { redirect_uri: redirectUri, client_state: state }, 'oauth');
   }
@@ -271,7 +271,7 @@ async function handleApi(request, env, url) {
   } else {
     try {
       const session = await sessionFor(request, env);
-      if (!session) return withCors(json({ error: 'Reconnect LeetGit to GitHub.' }, 401), origin);
+      if (!session) return withCors(json({ error: 'Reconnect SolveToGit to GitHub.' }, 401), origin);
       if (isSession && request.method === 'DELETE') {
         await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(session.token_hash).run();
         return withCors(response(null, 204), origin);
@@ -298,9 +298,9 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (!configIsValid(env) || url.origin !== env.APP_ORIGIN) {
-      return json({ error: 'LeetGit setup is incomplete.' }, 503);
+      return json({ error: 'SolveToGit setup is incomplete.' }, 503);
     }
-    if (url.pathname === '/' && request.method === 'GET') return json({ service: 'LeetGit' });
+    if (url.pathname === '/' && request.method === 'GET') return json({ service: 'SolveToGit' });
     try {
       if (url.pathname.startsWith('/auth/')) return await handleSetup(request, env, url);
       return await handleApi(request, env, url);

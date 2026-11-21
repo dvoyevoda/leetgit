@@ -17,7 +17,7 @@ function githubHeaders(token, body) {
   const headers = {
     Accept: JSON_TYPE,
     Authorization: `Bearer ${token}`,
-    'User-Agent': 'LeetGit',
+    'User-Agent': 'SolveToGit',
     'X-GitHub-Api-Version': '2026-03-10',
   };
   if (body !== undefined) headers['Content-Type'] = 'application/json';

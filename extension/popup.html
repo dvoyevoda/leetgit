@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LeetGit</title>
+  <title>SolveToGit</title>
   <link rel="stylesheet" href="popup.css">
   <script type="module" src="popup.js"></script>
 </head>
 <body>
   <header class="brand">
     <img src="icons/mark.svg" alt="" width="32" height="32">
-    <h1>LeetGit</h1>
+    <h1>SolveToGit</h1>
   </header>
 
   <main>
@@ -80,7 +80,7 @@
           </div>
           <div class="settings-footer">
             <p class="credit">Made by <a href="https://github.com/dvoyevoda" target="_blank" rel="noopener noreferrer">@dvoyevoda</a></p>
-            <a class="help-link" href="https://github.com/dvoyevoda/leetgit#help-and-feedback" target="_blank" rel="noopener noreferrer">Help &amp; feedback <span aria-hidden="true">↗</span></a>
+            <a class="help-link" href="https://github.com/dvoyevoda/solvetogit#help-and-feedback" target="_blank" rel="noopener noreferrer">Help &amp; feedback <span aria-hidden="true">↗</span></a>
           </div>
         </div>
       </details>
@@ -107,7 +107,7 @@
             <input id="token-no-expiration" type="checkbox" aria-describedby="token-lifetime-help">
             Request no expiration
           </label>
-          <p id="token-lifetime-help">Default is 366 days. GitHub may limit the lifetime.</p>
+          <p id="token-lifetime-help">Default is 365 days. GitHub may limit the lifetime.</p>
         </div>
 
         <div class="field">
@@ -115,6 +115,7 @@
           <input id="token-input" name="token" type="password" placeholder="github_pat_…" spellcheck="false" required>
         </div>
         <button id="connect-token" type="submit" class="button full-width">Connect repository</button>
+        <p class="setup-privacy">Connecting sends accepted code, results, and available problem text to your chosen GitHub repository. <a href="https://github.com/dvoyevoda/solvetogit/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer">Privacy policy ↗</a></p>
       </form>
     </section>
   </main>

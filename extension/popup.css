@@ -321,6 +321,12 @@ main { padding: 16px; }
 .setup-heading { margin-bottom: 13px; }
 .setup-heading p { margin-top: 3px; color: var(--muted); font-size: 12px; }
 
+.setup-privacy {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .setup-divider {
   display: flex;
   align-items: center;
