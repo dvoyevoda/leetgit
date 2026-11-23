@@ -73,6 +73,11 @@
             Include full problem text
           </label>
           <p id="problem-text-help">Adds the visible problem description to GitHub READMEs. Only share descriptions you have permission to use.</p>
+          <label class="checkbox" for="save-at-root">
+            <input id="save-at-root" type="checkbox" aria-describedby="save-at-root-help">
+            Save new problems at the repository root
+          </label>
+          <p id="save-at-root-help">The default folder is <code>solutions/</code>. Previously synced problems keep their folder.</p>
           <div class="actions">
             <button id="queue-retry" type="button" class="text-button" hidden>Retry queued sync</button>
             <button id="reconnect" type="button" class="text-button">Reconnect</button>

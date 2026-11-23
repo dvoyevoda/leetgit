@@ -26,7 +26,7 @@ The popup remembers the repository field when you close it. An unfinished token 
 
 ## What gets saved
 
-- Each problem has its own folder. For example, Two Sum uses `solutions/1-two-sum/`, with `README.md` and a source file such as `python3.py`.
+- New problems use numbered folders under `solutions/`, such as `solutions/1-two-sum/`. Each folder contains a `README.md` and a source file such as `python3.py`. Turn on **Save new problems at the repository root** in Settings to use `1-two-sum/` instead. Previously synced problems continue using their existing folders.
 - The README contains the problem link, available difficulty and topics, a code preview, and the latest accepted results per language. Runtime, memory, percentiles, and test counts appear when LeetCode provides them.
 - SolveToGit includes available full text for non-premium problems by default. Turn off **Include full problem text** in Settings to save a short overview and official link. Include full text where you have permission to share it. [LeetCode Terms of Service](https://leetcode.com/terms/)
 - Existing slug-only folders move to the numbered path on the next sync when the number is available and the path is free. Keep your own notes outside the generated section to preserve them through updates.

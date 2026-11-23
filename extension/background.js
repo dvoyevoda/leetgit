@@ -62,6 +62,7 @@ async function publicState(state, tabId) {
     repository: connection?.repository ?? null,
     totalPending: pending.length,
     includeProblemText: problemTextEnabled(state),
+    saveAtRoot: state.saveAtRoot === true,
   };
 }
 
@@ -141,6 +142,7 @@ async function flush(force = false) {
   const submission = {
     ...item.submission,
     includeProblemText: problemTextEnabled(state) && item.submission.includeProblemText !== false,
+    saveAtRoot: state.saveAtRoot === true,
   };
   if (!submission.includeProblemText && submission.problem) delete submission.problem.descriptionMarkdown;
   const title = submissionTitle(submission);
@@ -193,7 +195,10 @@ async function disconnect() {
   if (state.connection?.mode === 'app' && state.connection.origin === workerOrigin) {
     await appRequest('/session', state.connection.token, 'DELETE').catch(() => {});
   }
-  const cleared = { connection: null, pending: [], recent: [], syncedProblems: [], last: null, error: null };
+  const cleared = {
+    connection: null, pending: [], recent: [], syncedProblems: [], last: null, error: null,
+    saveAtRoot: state.saveAtRoot === true,
+  };
   await saveState(cleared);
   await clearSetupDrafts();
   return cleared;
@@ -208,6 +213,13 @@ async function setProblemText(enabled) {
       if (submission.problem) delete submission.problem.descriptionMarkdown;
     }
   }
+  await saveState(state);
+  return state;
+}
+
+async function setSaveAtRoot(enabled) {
+  const state = await readState();
+  state.saveAtRoot = enabled === true;
   await saveState(state);
   return state;
 }
@@ -242,6 +254,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         break;
       case 'relay.disconnect': operation = serial(disconnect); break;
       case 'relay.setProblemText': operation = serial(() => setProblemText(message.enabled)); break;
+      case 'relay.setSaveAtRoot': operation = serial(() => setSaveAtRoot(message.enabled)); break;
       case 'relay.retry': operation = serial(() => flush(true)); break;
       default: return;
     }

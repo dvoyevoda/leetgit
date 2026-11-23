@@ -17,6 +17,8 @@ const languageNames = new Map(Object.entries({
   python3: 'Python 3', typescript: 'TypeScript',
 }));
 
+const difficultyColors = { Easy: '137B59', Medium: 'A65E00', Hard: 'BC303C' };
+
 function asText(value, max) {
   return typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, max) : '';
 }
@@ -35,7 +37,7 @@ function normalizeProblem(input) {
   if (!input || typeof input !== 'object') return undefined;
   const title = asText(input.title, 200);
   const frontendId = asText(input.frontendId, 32);
-  const difficulty = ['Easy', 'Medium', 'Hard'].find(value => value.toLowerCase() === asText(input.difficulty, 10).toLowerCase());
+  const difficulty = Object.keys(difficultyColors).find(value => value.toLowerCase() === asText(input.difficulty, 10).toLowerCase());
   const topics = Array.isArray(input.topics)
     ? [...new Set(input.topics.slice(0, 24).map(tag => asText(tag, 80)).filter(Boolean))] : [];
   const paidOnly = typeof input.paidOnly === 'boolean' ? input.paidOnly : undefined;
@@ -95,6 +97,7 @@ export function normalizeSubmission(input) {
   if (problem) normalized.problem = problem;
   if (stats) normalized.stats = stats;
   if (typeof input.includeProblemText === 'boolean') normalized.includeProblemText = input.includeProblemText;
+  if (typeof input.saveAtRoot === 'boolean') normalized.saveAtRoot = input.saveAtRoot;
   return normalized;
 }
 
@@ -109,7 +112,7 @@ export function solutionFile(submission, folder) {
   const extension = extensions.get(language) ?? 'txt';
   const title = submissionTitle({ slug, problem });
   return {
-    path: `solutions/${folder ?? problemFolder({ slug, problem })}/${language}.${extension}`,
+    path: `${folder ?? problemFolder({ slug, problem })}/${language}.${extension}`,
     message: `Solve ${title} (${submissionLanguage(language)})\n\nLeetCode submission ${id}\n${url}`,
     content: code,
   };
@@ -210,7 +213,7 @@ function codePreview(code, language) {
 export function problemReadme(input, existingReadme = null, folder) {
   const submission = normalizeSubmission(input);
   const { slug, id, language, code, acceptedAt, stats, includeProblemText } = submission;
-  const path = `solutions/${folder ?? problemFolder(submission)}/README.md`;
+  const path = `${folder ?? problemFolder(submission)}/README.md`;
   const existing = typeof existingReadme === 'string' ? existingReadme : '';
   const block = findBlock(existing, startMarker, endMarker);
   const previous = unpackState(block?.body ?? '', slug);
@@ -240,16 +243,19 @@ export function problemReadme(input, existingReadme = null, folder) {
   const solution = `${latestLanguage}.${extensions.get(latestLanguage) ?? 'txt'}`;
   const preview = latestLanguage === language ? codePreview(code, language) :
     findBlock(block?.body ?? '', previewStart, previewEnd)?.body;
-  const tags = [problem.difficulty ? `**${problem.difficulty}**` : '', ...problem.topics.map(markdown)].filter(Boolean).join(' · ');
+  const difficulty = problem.difficulty
+    ? `![${problem.difficulty} difficulty](https://img.shields.io/badge/Difficulty-${problem.difficulty}-${difficultyColors[problem.difficulty]}?labelColor=35383D)` : '';
+  const problemLink = `[View on LeetCode](${problemUrl})`;
+  const topics = problem.topics.map(markdown).join(' · ');
+  const problemText = description ? [descriptionStart, safeBlock(description), descriptionEnd] :
+    problem.overview ? [`> ${markdown(problem.overview)}`] : [];
   const body = [
     startMarker,
     `<!-- leetgit:state ${packState({ slug, problem, rows })} -->`,
     '', `# ${markdown(title)}`, '',
-    ...(tags ? [tags, ''] : []),
-    '## Problem', '',
-    ...(description ? [descriptionStart, safeBlock(description), descriptionEnd, ''] :
-      problem.overview ? [`> ${markdown(problem.overview)}`, ''] : []),
-    `[Read the problem on LeetCode](${problemUrl})`, '',
+    [difficulty, problemLink].filter(Boolean).join(' · '), '',
+    ...(topics ? [`**Topics** · ${topics}`, ''] : []),
+    ...(problemText.length ? ['## Problem', '', ...problemText, ''] : []),
     '## Submission results', '',
     '| Language | Verdict | Runtime | Memory | Tests passed | Date (UTC) |',
     '| --- | --- | ---: | ---: | ---: | --- |',

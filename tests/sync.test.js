@@ -139,6 +139,8 @@ test('the background restores pending code after restart and restricts which sen
   const connected = await send(connect, popup);
   assert.equal(connected.repository.id, 42);
   assert.equal(connected.includeProblemText, true);
+  assert.equal(connected.saveAtRoot, false);
+  assert.equal(await send({ type: 'relay.setSaveAtRoot', enabled: true }, leetcode), undefined);
   assert.equal(storage.repositoryDraft, undefined);
   assert.equal(session.tokenDraft, undefined);
   assert.equal(access, 'TRUSTED_CONTEXTS');
@@ -148,7 +150,8 @@ test('the background restores pending code after restart and restricts which sen
   await send({ type: 'leetcode.context', slug: 'add-two-numbers' }, { ...leetcode, tab: { id: 2 } });
 
   offline = true;
-  assert.deepEqual(await send({ type: 'leetcode.accepted', submission }, leetcode), { ok: true, queued: true });
+  const input = { ...submission, saveAtRoot: true };
+  assert.deepEqual(await send({ type: 'leetcode.accepted', submission: input }, leetcode), { ok: true, queued: true });
   for (let poll = 0; !storage.relay.error && poll < 20; poll += 1) {
     await new Promise(resolve => setImmediate(resolve));
   }
@@ -192,4 +195,17 @@ test('the background restores pending code after restart and restricts which sen
   assert.equal(badges.get(1), '');
   assert.equal((await send({ type: 'relay.setProblemText', enabled: false }, popup)).includeProblemText, false);
   assert.equal((await send(connect, popup)).includeProblemText, false);
+
+  offline = true;
+  const next = { ...submission, id: '102', slug: 'add-two-numbers', problem: { frontendId: '2' } };
+  const nextPage = { ...leetcode, url: 'https://leetcode.com/problems/add-two-numbers/', tab: { id: 2 } };
+  assert.deepEqual(await send({ type: 'leetcode.accepted', submission: next }, nextPage), { ok: true, queued: true });
+  assert.equal((await send({ type: 'relay.setSaveAtRoot', enabled: true, tabId: 2 }, popup)).saveAtRoot, true);
+  offline = false;
+  const root = await send({ type: 'relay.retry', tabId: 2 }, popup);
+  assert.equal(root.last.readmeUrl, 'https://github.com/owner/solutions/blob/main/2-add-two-numbers/README.md');
+  assert.equal((await send({ type: 'relay.disconnect' }, popup)).saveAtRoot, true);
+  assert.equal((await send(connect, popup)).saveAtRoot, true);
+  assert.equal((await send({ type: 'relay.setSaveAtRoot', enabled: false }, popup)).saveAtRoot, false);
+  assert.equal((await send({ type: 'relay.status' }, popup)).saveAtRoot, false);
 });

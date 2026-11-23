@@ -282,6 +282,8 @@ main { padding: 16px; }
   font-size: 11px;
 }
 
+.settings-content p + .checkbox { margin-top: 8px; }
+
 .actions {
   display: flex;
   justify-content: flex-end;

@@ -2,6 +2,7 @@ import { problemReadme, readmeProblemSlug, solutionFile } from './solution.js';
 
 const MAX_README_BYTES = 2 * 1024 * 1024;
 const MAX_COMMIT_ATTEMPTS = 3;
+const SOLUTIONS_DIRECTORY = 'solutions';
 const encoder = new TextEncoder();
 
 export class GitCommitError extends Error {
@@ -73,7 +74,7 @@ function directory(entry) {
 
 function unavailableFolder() {
   return new GitCommitError(
-    'An existing repository path conflicts with this problem folder. Review the solutions directory before retrying.',
+    'An existing repository path conflicts with this problem folder. Review the repository before retrying.',
     { status: 422 },
   );
 }
@@ -120,42 +121,66 @@ async function inspectFolder(api, entry) {
 
 function numberedMatch(path, slug) {
   const suffix = `-${slug}`;
-  return path.endsWith(suffix) && /^[1-9]\d{0,9}$/.test(path.slice(0, -suffix.length));
+  const number = path.slice(0, -suffix.length);
+  return path.endsWith(suffix) && /^\d{1,10}$/.test(number) && Number(number) > 0;
 }
 
-async function locateProblem(api, root, slug, preferred) {
-  const rootEntries = await readTree(api, root);
-  const solutions = rootEntries.find((entry) => entry.path === 'solutions');
-  const empty = { folder: preferred, entries: [], previousReadme: null };
-  if (!solutions) return empty;
-  if (!directory(solutions)) throw unavailableFolder();
+function linksToProblem(readme, slug) {
+  const links = (readme ?? '').matchAll(/https:\/\/leetcode\.com\/problems\/([a-z0-9-]+)(?=\/|[?#\s<>"')\]]|$)/g);
+  for (const [, linkedSlug] of links) {
+    if (linkedSlug === slug) return true;
+  }
+  return false;
+}
 
-  const siblings = await readTree(api, objectSha(solutions.sha));
+async function locateInDirectory(api, siblings, slug, preferred, parent = '') {
+  const prefix = parent ? `${parent}/` : '';
   const preferredEntry = siblings.find((entry) => entry.path === preferred);
   const numbered = siblings.filter((entry) => directory(entry) && numberedMatch(entry.path, slug));
   const exact = numbered.find((entry) => entry.path === preferred);
-  if (!exact && numbered.length > 1) throw unavailableFolder();
+  if (!exact && numbered.length > 1) return { ambiguous: true };
 
   const candidate = exact ?? numbered[0];
   const established = candidate && await inspectFolder(api, candidate);
-  // A managed README distinguishes a numbered folder from another problem's old numeric slug.
-  if (established?.slug === slug) return established;
+  if (established && (established.slug === slug ||
+      (!established.slug && !parent && linksToProblem(established.previousReadme, slug)))) {
+    return { ...established, folder: prefix + established.folder };
+  }
 
   const legacy = siblings.find((entry) => entry.path === slug);
   if (directory(legacy)) {
     const previous = await inspectFolder(api, legacy);
-    if (!previous.slug || previous.slug === slug) {
+    if (previous.slug === slug || (!previous.slug && (parent || linksToProblem(previous.previousReadme, slug)))) {
       if (preferred !== slug && !preferredEntry) {
-        return { ...previous, folder: preferred, movedFrom: slug, siblings };
+        return { ...previous, parent, siblings, folder: prefix + preferred, movedFrom: prefix + slug };
       }
-      return previous;
+      return { ...previous, folder: prefix + slug };
     }
   }
+  return { occupied: Boolean(preferredEntry) };
+}
 
-  if (preferredEntry || (preferred === slug && established && !established.slug)) {
-    throw unavailableFolder();
+async function locateProblem(api, root, slug, preferred, saveAtRoot) {
+  const rootEntries = await readTree(api, root);
+  const solutions = rootEntries.find((entry) => entry.path === SOLUTIONS_DIRECTORY);
+  const parents = saveAtRoot ? ['', SOLUTIONS_DIRECTORY] : [SOLUTIONS_DIRECTORY, ''];
+  const [preferredParent] = parents;
+  let blocked = false;
+
+  for (const parent of parents) {
+    if (parent && !directory(solutions)) {
+      if (solutions && parent === preferredParent) blocked = true;
+      continue;
+    }
+    const siblings = parent ? await readTree(api, objectSha(solutions.sha)) : rootEntries;
+    const result = await locateInDirectory(api, siblings, slug, preferred, parent);
+    if (result.folder) return result;
+    if (result.ambiguous || (result.occupied && parent === preferredParent)) blocked = true;
   }
-  return empty;
+
+  if (blocked) throw unavailableFolder();
+  const folder = saveAtRoot ? preferred : `${SOLUTIONS_DIRECTORY}/${preferred}`;
+  return { folder, entries: [], previousReadme: null };
 }
 
 async function writeBlob(api, path, entry, bytes) {
@@ -186,13 +211,23 @@ async function buildTree(api, root, location, changes) {
   // Extend the intact legacy subtree first, then move the whole directory so user notes,
   // other language files, and file modes move with it in the same branch update.
   const movedTree = tree.length ? await writeTree(api, location.sha, tree) : location.sha;
+  const { parent, movedFrom, folder } = location;
+  if (!parent) {
+    return writeTree(api, root, [
+      { path: movedFrom, type: 'tree', mode: '040000', sha: null },
+      { path: folder, type: 'tree', mode: '040000', sha: movedTree },
+    ]);
+  }
+
+  const from = movedFrom.split('/').at(-1);
+  const to = folder.split('/').at(-1);
   const siblings = location.siblings.map(({ path, type, mode, sha }) => (
-    path === location.movedFrom
-      ? { path: location.folder, type, mode, sha: movedTree }
+    path === from
+      ? { path: to, type, mode, sha: movedTree }
       : { path, type, mode, sha }
   ));
   const solutions = await writeTree(api, null, siblings);
-  return writeTree(api, root, [{ path: 'solutions', type: 'tree', mode: '040000', sha: solutions }]);
+  return writeTree(api, root, [{ path: parent, type: 'tree', mode: '040000', sha: solutions }]);
 }
 
 export async function commitSubmission({ request, repository, submission }) {
@@ -202,7 +237,7 @@ export async function commitSubmission({ request, repository, submission }) {
   const baseURL = `https://github.com/${name}/blob/${encodeURIComponent(branch)}`;
   const api = (path, options) => request(`/repos/${name}/git${path}`, options);
   const initial = solutionFile(submission);
-  const [, preferred, sourceName] = initial.path.split('/');
+  const [preferred, sourceName] = initial.path.split('/');
   const source = encoder.encode(initial.content);
   const sourceSha = await gitBlobSha(source);
   let head = await readHead(api, ref, branch);
@@ -211,7 +246,7 @@ export async function commitSubmission({ request, repository, submission }) {
     const commitResponse = await api(`/commits/${head}`);
     const commit = await requireOK(commitResponse, 'GitHub could not read the current commit.').json();
     const root = objectSha(commit.tree?.sha);
-    const location = await locateProblem(api, root, submission.slug, preferred);
+    const location = await locateProblem(api, root, submission.slug, preferred, submission.saveAtRoot === true);
     const { folder, entries, readmeEntry, previousReadme, movedFrom } = location;
     const sourceEntry = fileEntry(entries, sourceName, 'solution');
     const solution = folder === preferred ? initial : solutionFile(submission, folder);

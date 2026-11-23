@@ -12,9 +12,10 @@ const sample = {
 
 test('the README presents problem facts and accepted results alongside exact code', () => {
   const { path, content } = problemReadme(sample);
-  assert.equal(path, 'solutions/101-fixture-problem/README.md');
+  assert.equal(path, '101-fixture-problem/README.md');
   assert.ok(content.includes('# 101. Fixture \\[Problem\\]'));
-  assert.ok(content.includes('**Medium** · Arrays · Sorting'));
+  assert.ok(content.includes('[View on LeetCode](https://leetcode.com/problems/fixture-problem/)'));
+  assert.ok(content.includes('**Topics** · Arrays · Sorting'));
   assert.ok(content.includes('> A short description for this fixture.'));
   assert.ok(content.includes('0 ms (beats 100%) | 12.5 MB (beats 70.34%) | 12/12 | 2026-11-20'));
   assert.ok(content.includes('````python\n' + sample.code + '````'));
@@ -26,7 +27,22 @@ test('the README presents problem facts and accepted results alongside exact cod
 test('folder names normalize the LeetCode display number and fall back to a safe slug', () => {
   assert.equal(problemFolder({ ...sample, problem: { frontendId: '000101' } }), '101-fixture-problem');
   assert.equal(problemFolder({ ...sample, problem: { frontendId: 'LCP 01' } }), 'fixture-problem');
-  assert.equal(solutionFile(sample).path, 'solutions/101-fixture-problem/python3.py');
+  assert.equal(solutionFile(sample).path, '101-fixture-problem/python3.py');
+  assert.equal(solutionFile(sample, 'solutions/101-fixture-problem').path, 'solutions/101-fixture-problem/python3.py');
+  assert.equal(problemReadme(sample, null, 'solutions/101-fixture-problem').path, 'solutions/101-fixture-problem/README.md');
+});
+
+test('the README shows a labeled color badge only when LeetCode reports the difficulty', () => {
+  for (const [difficulty, color] of [['Easy', '137B59'], ['Medium', 'A65E00'], ['Hard', 'BC303C']]) {
+    const { content } = problemReadme({ ...sample, problem: { ...sample.problem, difficulty } });
+    assert.ok(content.includes(
+      `![${difficulty} difficulty](https://img.shields.io/badge/Difficulty-${difficulty}-${color}?labelColor=35383D)`,
+    ));
+  }
+  const { content } = problemReadme({ ...sample, problem: undefined });
+  assert.ok(!content.includes('img.shields.io'));
+  assert.ok(!content.includes('## Problem'));
+  assert.ok(content.includes('[View on LeetCode](https://leetcode.com/problems/fixture-problem/)'));
 });
 
 test('a distinct result updates the README, preserving other languages, custom notes, and replay order', () => {

@@ -15,6 +15,7 @@ const queueRetry = byId('queue-retry');
 const reconnect = byId('reconnect');
 const settings = byId('settings');
 const includeProblemText = byId('include-problem-text');
+const saveAtRoot = byId('save-at-root');
 const statusLabels = new Map([
   ['created', 'Solution saved'],
   ['updated', 'Solution updated'],
@@ -197,6 +198,11 @@ function renderActivity({ page, slug, saved, pending, last, error }, repositoryU
   retry.hidden = !onProblem || pending < 1;
 }
 
+function renderSettings(state) {
+  includeProblemText.checked = state?.includeProblemText !== false;
+  saveAtRoot.checked = state?.saveAtRoot === true;
+}
+
 function render(state, preserveNotice = false) {
   current = state;
   const { repository } = state;
@@ -205,7 +211,7 @@ function render(state, preserveNotice = false) {
   reconnect.textContent = reconnecting ? 'Cancel reconnect' : 'Reconnect';
   byId('setup-title').textContent = reconnecting ? 'Reconnect repository' : 'Connect a repository';
   byId('setup-purpose').hidden = reconnecting;
-  includeProblemText.checked = state.includeProblemText !== false;
+  renderSettings(state);
   queueRetry.hidden = !!state.pending || !(state.totalPending > 0);
   if (!preserveNotice) message('');
   if (!repository) return;
@@ -245,7 +251,7 @@ async function run(button, operation, progress = 'Working…') {
     render(await operation());
     complete = true;
   } catch (error) {
-    includeProblemText.checked = current?.includeProblemText !== false;
+    renderSettings(current);
     message(error.message, true);
   } finally {
     operating = false;
@@ -341,6 +347,15 @@ includeProblemText.addEventListener('change', () => {
   }
   const enabled = includeProblemText.checked;
   void run(includeProblemText, () => command('relay.setProblemText', { enabled }), '');
+});
+
+saveAtRoot.addEventListener('change', () => {
+  if (operating) {
+    saveAtRoot.checked = current?.saveAtRoot === true;
+    return;
+  }
+  const enabled = saveAtRoot.checked;
+  void run(saveAtRoot, () => command('relay.setSaveAtRoot', { enabled }), '');
 });
 
 for (const button of [retry, queueRetry]) {

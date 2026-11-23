@@ -218,12 +218,13 @@ test('Worker uses metadata only to check the pinned repository and rejects a vis
 });
 
 test('Worker scopes the atomic solution and README writes to the repository ID', async (t) => {
-  const sourcePath = 'solutions/1-two-sum/python3.py';
-  const readmePath = 'solutions/1-two-sum/README.md';
+  const sourcePath = '1-two-sum/python3.py';
+  const readmePath = '1-two-sum/README.md';
   const submission = {
     id: '120', slug: 'two-sum', language: 'python3', code: '# λ\nprint(1)\n',
     acceptedAt: '2026-11-20T12:00:00.000Z',
     problem: { frontendId: '1' },
+    saveAtRoot: true,
   };
   const head = 'a'.repeat(40);
   const root = 'b'.repeat(40);
@@ -251,7 +252,9 @@ test('Worker scopes the atomic solution and README writes to the repository ID',
       return apiResponse({ ref: 'refs/heads/main', object: { type: 'commit', sha: head } });
     }
     if (resource === `/commits/${head}`) return apiResponse({ tree: { sha: root } });
-    if (resource === `/trees/${root}`) return apiResponse({ tree: [], truncated: false });
+    if (resource === `/trees/${root}`) {
+      return apiResponse({ tree: [{ path: 'solutions', type: 'blob', mode: '100644' }], truncated: false });
+    }
     if (resource === '/blobs') {
       const { content, encoding } = JSON.parse(options.body);
       assert.equal(encoding, 'base64');
