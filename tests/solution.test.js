@@ -35,9 +35,8 @@ test('folder names normalize the LeetCode display number and fall back to a safe
 test('the README shows a labeled color badge only when LeetCode reports the difficulty', () => {
   for (const [difficulty, color] of [['Easy', '137B59'], ['Medium', 'A65E00'], ['Hard', 'BC303C']]) {
     const { content } = problemReadme({ ...sample, problem: { ...sample.problem, difficulty } });
-    assert.ok(content.includes(
-      `![${difficulty} difficulty](https://img.shields.io/badge/Difficulty-${difficulty}-${color}?labelColor=35383D)`,
-    ));
+    const badge = `![${difficulty} difficulty](https://img.shields.io/badge/Difficulty-${difficulty}-${color}?labelColor=35383D)`;
+    assert.ok(content.includes(`${badge}\n\n[View on LeetCode](https://leetcode.com/problems/fixture-problem/)`));
   }
   const { content } = problemReadme({ ...sample, problem: undefined });
   assert.ok(!content.includes('img.shields.io'));

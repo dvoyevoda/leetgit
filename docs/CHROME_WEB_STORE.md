@@ -7,7 +7,7 @@ This guide contains the listing copy, privacy disclosures, and reviewer walkthro
 From the repository root, use Python 3 to create the ZIP. `manifest.json` is at the root of the resulting archive.
 
 ```sh
-python3 scripts/build-store-zip.py /absolute/path/solvetogit-chrome-web-store-v0.3.0.zip
+python3 scripts/build-store-zip.py /absolute/path/solvetogit-chrome-web-store-v0.3.1.zip
 ```
 
 For a local check, extract that ZIP into a clean folder and load the folder containing `manifest.json` at `chrome://extensions`. Use a separate Chrome profile with a disposable GitHub repository for the first sync. [Chrome Web Store package requirements](https://developer.chrome.com/docs/webstore/prepare#zip-your-extension-files)

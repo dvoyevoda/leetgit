@@ -2,13 +2,17 @@
 
 SolveToGit saves accepted LeetCode solutions to one GitHub repository you choose. Each sync commits your exact source and a problem README together, with the verdict, runtime, memory, and test results LeetCode provides.
 
-[Download for Chrome](https://github.com/dvoyevoda/solvetogit/releases/latest) · [Privacy policy](PRIVACY.md) · [Help and feedback](#help-and-feedback)
+[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/solvetogit-leetcode-to-gi/cndepplnoclmckjnnohnpanciheajnmb) · [Privacy policy](PRIVACY.md) · [Help and feedback](#help-and-feedback)
 
 ![SolveToGit popup showing an accepted solution saved to a selected GitHub repository](docs/assets/sync-preview.png)
 
 ## Install on Chrome
 
-1. Download and extract the manual-install Chrome ZIP from the latest release.
+Click **Add to Chrome** on the Store listing. Open SolveToGit from the Extensions menu and refresh any LeetCode tabs that were already open. If you’re switching from an unpacked copy, connect your repository in the Store install and disable the unpacked copy to avoid syncing twice.
+
+### Manual installation
+
+1. Download and extract the manual-install Chrome ZIP. [GitHub Releases](https://github.com/dvoyevoda/solvetogit/releases)
 2. Open `chrome://extensions`, turn on **Developer mode**, and click **Load unpacked**.
 3. Select the extracted `extension` folder. Open SolveToGit from the Extensions menu and refresh any LeetCode tabs that were already open. [Chrome’s extension installation guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked)
 
